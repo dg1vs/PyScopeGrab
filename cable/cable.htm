@@ -1,0 +1,264 @@
+<html><body bgcolor=white>
+<h1><font face="Arial">The optical cable</font></h1>
+<font face="Arial">It is easy to build your own serial RS232 to optical adapter. If your PC or laptop doesn't have a serial port, you'll need one of those USB&lt;-&gt;RS232 converter dongles.<br>
+<br>
+Robert Lacoste has two cable schematics on his page<br>
+<a href="http://www.geocities.com/robert_lacoste/scopelink.htm" target="_blank">http://www.geocities.com/robert_lacoste/scopelink.htm</a>.<br>
+<br>
+There's also my own version of the cable, which is at<br>
+<a href="http://www.iki.fi/jan.wagner/fluke/" target="_blank">http://www.iki.fi/jan.wagner/fluke/</a>.<br>
+<br>
+Any of these cables should work fine, both in FlukeView as well as ScopeGrab.<br>
+<br>
+If you like USB: it should be possible to use one of FTDI's USB development plug-in serial modules like USBMOD3, USBMOD4, and others. However, you would have to do the cable design on your own (basically, one or two resistors, one IR LED, one IR phototransistor). You can of course use the information from the above pages to help in such a design.<br>
+<br>
+Below is a copy of my website with the instructions for a DIY cable.<br>
+<br>
+</font>
+<hr size=1>
+  <font face="Arial">
+  <u><b>Background info:</b></u><br>
+  This is an easy-to-build DIY Scopemeter 190
+  series link cable, intended as an alternative to the &quot;real&quot; 
+<a target="_blank" 
+href="http://us.fluke.com/usen/products/AccessoryDetail.htm?cs_id=31870%28FlukeProducts%29&catalog_name=FlukeUnitedStates&category=LEAD(FlukeProducts)">PM9080</a>
+
+  adapter kit which costs between $150 and $200, and the $150 <a 
+  target="_blank" href="http://assets.fluke.com/manuals/OC4usb__iseng0000.pdf">OC4USB</a> 
+  if 
+  you lack a serial port and buy any cheap ($30?) USB-RS232 converter. 
+  This circuit can be built for
+  around $15 in about an hour (incl all double- and triple-checking :o). 
+  The circuit is a slightly modified and 
+  improved(?) version 
+  of Robert Lacoste's circuit, which you can find on his <a 
+href="http://www.geocities.com/robert_lacoste/scopelink.htm" target="_blank">ScopeMeter
+  Link</a> page.</font></font></p>
+  <p><font face="Arial">Here's a bit of crucial information,  
+  copied directly from the FlukeView 4.0 software PDF manual (which is 
+  not available at www.fluke.com anymore, I just wonder why... ;-):</font></p>
+  <blockquote>
+    <p><font face="Arial"><u>optical port:</u> infrared 800nm<br>
+    <br>
+    <u>signal levels:</u> (RXD, TXD, optical):<br>
+    lSPACE (0)&nbsp; = (U_rs232 &gt; 4V) = light<br>
+    MARK (1) = (U_rs232 &lt; -4V) = no light<br>
+    <br>
+    <u>port settings:</u> 1200 baud, Xon/Xoff software handshake<br>
+    </font>
+    </p>
+  </blockquote>
+  <font face="Arial">
+  <u>Additional notes:</u><br>
+  </font>
+  <ul>
+  <li><font face="Arial">optical port on the SM196: the upper hole contains the IR 
+  transmitter, and the lower the IR receiver, and one could assume all 
+  190(C) and 90 series have this arrangement
+  </font>
+  <li><font face="Arial">optical port on the SM123: I was pointed out (thanks to Leif K.) 
+  that on the 
+  123 the upper is receive and lower is transmit, i.e. reverse of
+  arrangement of the 190 series
+  </font>
+  <li><font face="Arial">while the user manual states 800nm IR, in practice anything from 
+  700..880nm (for rx&amp;tx) should work just fine, as these
+  things aren't exactly monochromatic like lasers...
+  </font>
+  <li><font face="Arial">if you use a really crappy USB&lt;=&gt;RS-232 converter that 
+  doesn't give out valid +/- RS232 signal levels or want to use a 
+  microcontroller with UART instead of a PC, you may need to change 
+  LM393 '-12V' pin 4 and the '-12V' end of R4 connections to 'GND', and 
+  may leave out D2 and D4 (though I have not yet tested if the circuit 
+  then will still work on such a dongle/converter)
+  </font>
+  <li><font face="Arial">FlukeView offers 1200 to 56kBaud, but at least ScopeMeter 196 
+  supports only 1200 and 19200
+  </font>
+  <li><font face="Arial">some of the 'odd' DB9 pin interconnects in the schematic are what 
+  FlukeView needs in order to detect a 'PM9080'
+  </font>
+  </ul>
+
+  <font face="Arial">
+
+  <br>As a reference, here are typical (?) signal states on the serial port, 
+  as a few people have already inquired about this. I measured on a 
+  laptop, <i>without</i> the link cable connected. Signals were measured 
+  before FlukeView was started and tried to connect, and during 
+  connection attempts:<br>
+  <br>
+  </font>
+  <table border=0 cellspacing=6>
+  <tr>
+    <td colspan=2><font face="Arial"><b>initial state</b><br><small>(may vary in your case)</small></font></td>
+
+    <td><font face="Arial">&nbsp; &nbsp; </font> </td>
+    <td colspan=2 valign=top><font face="Arial"><b>FlukeView connecting</b></font></td>
+  </tr>
+  <tr>
+    <td><font face="Arial">pin 1</font></td><td><font face="Arial">0V</font></td>
+    <td></td>
+
+    <td><font face="Arial">pin 1</font></td><td><font face="Arial">0V</font></td>
+  </tr>
+  <tr>
+    <td><font face="Arial">pin 2</font></td><td><font face="Arial">0V</font></td>
+    <td></td>
+    <td><font face="Arial">pin 2</font></td><td><font face="Arial">0V</font></td>
+
+  </tr>
+  <tr>
+    <td><font face="Arial">pin 3</font></td><td><font face="Arial">+6.5V</font></td>
+    <td></td>
+    <td><font face="Arial">pin 3</font></td><td><font face="Arial">-5V, with
+    short +6.5/-5V bursts during TX</font></td>
+  </tr>
+  <tr>
+
+    <td><font face="Arial">pin 4</font></td><td><font face="Arial">+6.5V</font></td>
+    <td></td>
+    <td><font face="Arial">pin 4</font></td><td><font face="Arial">+6.5V, with
+    short -5V pulses</font></td>
+  </tr>
+  <tr>
+    <td><font face="Arial">pin 5</font></td><td><font face="Arial">0V</font></td>
+
+    <td></td>
+    <td><font face="Arial">pin 5</font></td><td><font face="Arial">0V</font></td>
+  </tr>
+  <tr>
+    <td><font face="Arial">pin 6</font></td><td><font face="Arial">0V</font></td>
+    <td></td>
+    <td><font face="Arial">pin 6</font></td><td><font face="Arial">0V</font></td>
+
+  </tr>
+  <tr>
+    <td><font face="Arial">pin 7</font></td><td><font face="Arial">-5V</font></td>
+    <td></td>
+    <td><font face="Arial">pin 7</font></td><td><font face="Arial">+6.5V</font></td>
+  </tr>
+  <tr>
+
+    <td><font face="Arial">pin 8</font></td><td><font face="Arial">0V</font></td>
+    <td></td>
+    <td><font face="Arial">pin 8</font></td><td><font face="Arial">0V</font></td>
+  </tr>
+  <tr>
+    <td><font face="Arial">pin 9</font></td><td><font face="Arial">0V</font></td>
+
+    <td></td>
+    <td><font face="Arial">pin 9</font></td><td><font face="Arial">0V</font></td>
+  </tr>
+  </table><font face="Arial"></font>
+
+  </font>
+
+  <p><font face="Arial"><img border="0" src="fluke-optical-schematic.gif" width="933" height="424"><br>
+  <br>
+  <b>
+  <u>Parts:</u></b>
+
+  </font>
+
+  <table border="0" cellspacing=8 cellpadding=0>
+  <tr><td><font face="Arial">X1</font></td><td><font face="Arial">female DB-9 connector</font></td></tr>
+  <tr><td><font face="Arial">D1,2,3,4</font></td><td><font face="Arial">1N4148</font></td></tr>
+  <tr><td><font face="Arial">C1,2</font></td><td><font face="Arial">&ge;100uF 16V electrolytic or tantal</font></td></tr>
+  <tr><td><font face="Arial">LED1</font></td><td><font face="Arial">3mm IR LED</font></td></tr>
+
+  <tr><td valign=top><font face="Arial">PT1 or PD1</font></td><td>
+	<font face="Arial">3mm IR photodiode in reverse, or IR phototransistor (collector at +12v)
+  <br>e.g. BPW42: short lead or biggest chunk inside = collector = +12V</font></td></tr>
+  <tr><td><font face="Arial">IC1a</font></td><td><font face="Arial">LM393 analog comparator</font></td></tr>  
+  <tr><td><font face="Arial">R1</font></td><td><font face="Arial">270ohm 1/4W</font></td></tr>
+  <tr><td valign=top><font face="Arial">R2</font></td><td><font face="Arial">10kOhm 1/4W<br>(pull-up, only needed for 
+  open-collector 
+  comparators i.e. the LM393)</font></td></tr>
+
+  <tr><td><font face="Arial">R3</font></td><td><font face="Arial">5.6kOhm 1/4W</font></td></tr>
+  <tr><td><font face="Arial">R4</font></td><td><font face="Arial">&ge;47kOhm trimmer/pot</font></td></tr>
+  </table>
+  <font face="Arial">
+  <br>
+  <u><b>Circuit description:</b></u><br>
+  The circuit works <b>without batteries</b> or any external 
+  supply, and you MUST NOT connect either to the circuit while it is 
+  plugged into the PC serial port. Doing so could damage the port.<br>
+
+  <br>
+  The circuit derives its '+12V' and '-12V' rails from the PC serial 
+  port. The actual rail voltages will vary, depending on the 
+  particular PC, laptop, or USB dongle used.<br>
+  <br>
+  The rails are set up via D1, D2, D4, and C1, C2. Wire all +12V 
+  lines together. The same applies to -12V, and GND (but obviously, don't 
+  interconnect +12V and -12V and GND...). The comparator chip supply pins 
+  must be connected as well, to +12V (=comparator +Vcc/Vdd) and -12V (=comparator gnd/Vee/Vss). 
+  For the LM393, you connect pin 8 to +12V and pin 4 to -12V.<br>
+  <br>
+  The <i>connector &amp; supply rails</i> and <i>RS-232 &lt;=&gt; optical</i>
+
+  sections can be soldered on the same vero board. A 4-wire data cable (GND, IR
+  diode in, IR detector in &amp; out) is ok for connecting the <i>optical
+  connector</i> section to the circuit.</font></p>
+  <p><font face="Arial"><b>Potentiometer R4</b> is adjusted 
+  for the best output signal from the LM393 (output = pin 1). Use a 
+  TV remote control pointed at the receiver, and your 
+  ScopeMeter to scope the LM393 output signal while the circuit is 
+  plugged into the PC serial port and <a 
+  href="http://scopegrab32.sourceforge.net/" target="_blank">scopegrab32</a> is
+  running and powers the circuit. If you suspect the IR detector (diode, 
+  transistor) doesn't work, scope voltage waveform accross R3. You 
+  should see a &gt;2Vpp square wave with high DC offset.
+  <br>
+
+  <br>
+  All diodes are <b>1N4148</b> fast small-signal diodes. D1, D2, D4 set up
+  the rails. D3 protects the IR LED, as they often won't tolerate &gt;5V
+  of reverse voltage.<br>
+  <br>The cheap <b>LM393</b> comparator could probably be replaced by 
+  LM193/LM293, a cheap TL072 or TL082
+  op-amp, or some other comparator. Depending on the chip, 
+  the circuit will work down to  +5V&lt;=&gt;-5V rails, as typical for 
+  e.g. laptop PCs (where the LM393 will work). If you use a part other 
+  than the LM393, be sure to check the datasheet first, and confirm that 
+  the comparator is rated to work with +-15V i.e. 30V rails without 
+  getting damaged!<br>
+
+  <br>
+  The <b>IR LED</b> is a garden variety IR diode, as found in all TV 
+  remote controls etc. As an <b>IR detector</b> you can use either an IR 
+  photodiode plugged in in &quot;reverse&quot; i.e. reverse biased, or 
+  an IR phototransistor. The phototransistor must be connected correctly
+  or it will eventually fry: the collector is usually the short lead 
+  and needs to go to '+12V'. A phototransistor has higher gain than the 
+  diode, which means the detected signal is cleaner. Nevertheless a 
+  photodiode will work just equally well. The choice depends on which 
+  happens to be cheaper or best available... :o)<br>
+  <br>
+  Use 3.5mm diameter optical components. You would have to grind down  
+  5mm components to make them fit inside the Fluke connector. (Using
+  a piece of sanding paper this is possible, but tedious. Tried it. :)<br>
+
+  <br>
+  The alignment of the optical board (IR detector and diode) inside the
+  Scopemeter connector is critical. Diode and detector should be close to 
+  the mirror which is found inside the Fluke. They should be sticking
+  straight in into the connector holes, without being tilted at an 
+  angle.<br>
+  <br>
+  Here's a pic of the finished board:<br>
+  <br>
+  <img border="0" src="adapter-pic1.gif" width="434" height="363"><br>
+  [my version]<br>
+
+  <br>
+  <img border="0" src="DSC03465.gif" width="50%"><br>
+  [J. Friedrich]<br>
+  <br>
+  <img border="0" src="fluke_oc4serial.gif"><br>
+  [Leif K.'s SMD version]</font></p>
+<hr size=1>
+<center><font color="#666666" face="Arial">(C) 2005 Jan Wagner, jan.wagner@iki.fi</font></center>
+</body></html>

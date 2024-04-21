@@ -1,0 +1,14 @@
+
+
+             REMOTE CONTROL AND PROGRAMMING REFERENCE
+
+                       for the FLUKE 105
+
+                     ScopeMeter Test Tool
+
+    =============================================================
+
+
+    The remote control and programming information for the Fluke 105
+    is identical to the Fluke 99. Refer to the FLUKE99.TXT file.
+
