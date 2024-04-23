@@ -247,6 +247,22 @@ def get_identity(port):
 
 
 def get_satus(port):
+    status_text = {
+        # from fluke manual
+        # pos | Status Description         | value        SC ME DI OM EX CO
+        # -----------------------------------------------------------------
+        0: 'Hardware settled',              # 1           X  X  X  X  X  X
+        1: 'Acquisition armed',             # 2           X  X  X  X  X  X
+        2: 'Acquisition triggered',         # 4           X
+        3: 'Acquisition busy',              # 8           X  X  X  X  X  X
+        4: 'WAVEFORM A memory filled',      # 16          X  X  X  X  X  X
+        5: 'WAVEFORM B memory filled',      # 32          X              X
+        6: 'WAVEFORM A+/-B memory filled',  # 64          X
+        7: 'Math function ready',           # 128         X  X  X  X  X
+        8: 'Numeric results available',     # 256         X  X  X  X  X
+        9: 'Hold mode active',              # 512         X  X  X  X  X  X
+    }
+
     LOG.info('Getting status of ScopeMeter...')
     send_command(port, 'IS')
     input = bytearray()
@@ -262,19 +278,11 @@ def get_satus(port):
     status = int(input)
     LOG.debug(status)
 
+    for pos in range(len(status_text)):
+        if status & (1 << pos):
+            print(f"Bit {pos} set: {status_text[pos]}")
 
-# value   Status Description              SC ME DI OM EX CO
-# ---------------------------------------------------------
-# 1       Hardware settled                X  X  X  X  X  X
-# 2       Acquisition armed               X  X  X  X  X  X
-# 4       Acquisition triggered           X
-# 8       Acquisition busy                X  X  X  X  X  X
-# 16      WAVEFORM A memory filled        X  X  X  X  X  X
-# 32      WAVEFORM B memory filled        X              X
-# 64      WAVEFORM A+/-B memory filled    X
-# 128     Math function ready             X  X  X  X  X
-# 256     Numeric results available       X  X  X  X  X
-# 512     Hold mode active                X  X  X  X  X  X
+    return status
 
 
 def get_screenshot(port, options):
@@ -314,6 +322,7 @@ def get_screenshot(port, options):
 
 def initialize_port(opt):
     LOG.info('Opening and configuring serial port...')
+    # ToDo Add Timeout
     port = serial.Serial(opt.tty, 1200, timeout=1)  # 1200 ist default start baudrate
     print('done')
 
