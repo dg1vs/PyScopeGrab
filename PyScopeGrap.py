@@ -231,7 +231,6 @@ def get_identity(port):
     if len(identity) != 6:  # 6 is for fluke 105
         LOG.warning('error: unable to decode identity strin')
         exit(1)
-
     # ToDo
     #Getting identity of ScopeMeter...bytearray(b'ScopeMeter 105 Series II; V7.15; 96-02-06; English V2.15; German V2.15; UHM V1.0')
     #[bytearray(b'ScopeMeter 105 Series II'), bytearray(b' V7.15'), bytearray(b' 96-02-06'), bytearray(b' English V2.15'), bytearray(b' German V2.15'), bytearray(b' UHM V1.0')]
