@@ -6,6 +6,7 @@ import os, sys, time
 from byte_reader import ByteReader
 
 
+
 def init_logger(opt):
     # Definition logger features see https://docs.python.org/3/howto/logging.html
     logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def process_arguments():
 def check_arguments(opt):
     if opt.grab and opt.wait:
         LOG.error("It doesn't make sense to have wait and grab enabled the same time")
-        exit(20);
+        exit(20)
 
 
 def display_progress_bar(count, total, suffix=''):
