@@ -39,3 +39,28 @@ https://www.fluke.com/en-us/product/accessories/adapters/fluke-pm8907
 https://sourceforge.net/p/scopegrab32/discussion/421406/thread/7abc7b05/
 
 https://www.itsonlyaudio.com/measurement/fluke-123-opto-isolated-cable/
+
+## debugging tipps
+python3 -m pyscopegrap -w -o test.png --tap raw.bin -v
+python3 -m pyscopegrap --sniff 8 --tap raw.bin -v  
+
+python3 -m pyscopegrap --help            
+python3 -m pyscopegrap -o test.png  
+python3 -m pyscopegrap --withgu
+python3 -m pyscopegrap --withgui
+
+### Minimal console output only:
+python3 -m pyscopegrap
+(Console shows INFO+ messages.)
+
+### Console + file logging (file gets DEBUG details, console gets INFO):
+python3 -m pyscopegrap -l --log-file /tmp/psg.log
+
+### Make console verbose too:
+python3 -m pyscopegrap -l -v
+
+
+### File-only logging (no console output):
+python3 -m pyscopegrap -l --quiet
+
+
