@@ -1,14 +1,29 @@
 # PyScopeGrab
-Little Python script for talking to and retrieving data from Fluke ScopeMeter 105
+Little Python script for talking to and retrieving data from Fluke ScopeMeter 105, mainly serial capture & PNG export. 
 
+- CLI usage: `pyscopegrap [-h] [--withgui] ...`
+- GUI: install the optional extra `pip install .[gui]` and run `pyscopegrap --withgui`
 
+## Install (editable / dev)
+```bash
+pip install -e .
+```
 
+## Requirements
+- Python 3.9+
+- `pyserial`, `Pillow`
+- Optional GUI: `PyQt6`
 
+## Run
+```bash
+# CLI grab (defaults pulled from user settings)
+pyscopegrap -g --out screenshot.png
 
+# Launch GUI
+pyscopegrap --withgui
+```
 
-
-
-# Some intressting links
+## Some intressting links
 https://www.stevenmerrifield.com/scopegrab.html
 
 https://github.com/sjm126
