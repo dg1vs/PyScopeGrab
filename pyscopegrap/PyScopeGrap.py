@@ -129,7 +129,7 @@ def run_gui_from_separate_file(args, LOG):
     # Lazy import so CLI users don’t need PyQt6
     try:
         from PyQt6.QtWidgets import QApplication
-        from scope_gui_pyqt6 import MainWindow  # your separate GUI file
+        from pyscopegrap.scope_gui_pyqt6 import MainWindow  # your separate GUI file
     except Exception as e:
         print("GUI dependencies are missing (PyQt6) or scope_gui_pyqt6.py not found.")
         print(f"Details: {e}")

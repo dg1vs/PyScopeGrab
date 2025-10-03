@@ -1,1 +1,42 @@
+# --- Logs & local data ---
+*.log
 *.png
+
+# --- PyCharm / IntelliJ ---
+.idea/
+# --- VS Code (optional: keep settings.json if you want to share) ---
+.vscode/
+
+
+# --- Python bytecode / caches ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+.python-version  # pyenv/uv
+
+
+# --- Packaging / build outputs ---
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- Test / tooling caches ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+.tox/
+.nox/
+.cache/
