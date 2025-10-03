@@ -8,7 +8,7 @@ from pathlib import Path
 
 # Qt6 (PyQt6)
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal as Signal, pyqtSlot as Slot
-from PyQt6.QtCore import QSettings
+#from PyQt6.QtCore import QSettings
 from PyQt6.QtGui import QAction, QPixmap, QColor
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
@@ -24,82 +24,8 @@ try:
 except Exception:
     list_ports = None
 
-from app_settings import AppSettings
-from scope_grabber import ScopeGrabber
-
-# --- Application settings wrapper -------------------------------------------
-
-
-class AppSettings:
-    """
-    Thin wrapper around QSettings providing typed getters/setters + defaults.
-    Uses per-user INI config (on Linux: ~/.config/PyScopeGrap/Fluke105.ini).
-    """
-    ORG = "PyScopeGrap"
-    APP = "Fluke105"
-
-    # defaults
-    DEFAULT_PORT = "COM3" if sys.platform.startswith("win") else "/dev/ttyUSB0"
-    DEFAULT_BAUD = 19200
-    DEFAULT_FG   = "#222222"
-    DEFAULT_BG   = "#b1e580"
-    DEFAULT_CYCLIC_MS = 3000  # 3s
-
-    def __init__(self):
-        # Use INI files so the config is easy to find/edit
-        self._s = QSettings(QSettings.Format.IniFormat,
-                            QSettings.Scope.UserScope,
-                            self.ORG, self.APP)
-
-    # --- typed properties ----------------------------------------------------
-    @property
-    def port(self) -> str:
-        return self._s.value("serial/port", self.DEFAULT_PORT, str)
-
-    @port.setter
-    def port(self, v: str):
-        self._s.setValue("serial/port", v)
-
-    @property
-    def baud(self) -> int:
-        return int(self._s.value("serial/baud", self.DEFAULT_BAUD))
-
-    @baud.setter
-    def baud(self, v: int):
-        self._s.setValue("serial/baud", int(v))
-
-    @property
-    def fg(self) -> str:
-        return self._s.value("colors/fg", self.DEFAULT_FG, str)
-
-    @fg.setter
-    def fg(self, v: str):
-        self._s.setValue("colors/fg", v)
-
-    @property
-    def bg(self) -> str:
-        return self._s.value("colors/bg", self.DEFAULT_BG, str)
-
-    @bg.setter
-    def bg(self, v: str):
-        self._s.setValue("colors/bg", v)
-
-    @property
-    def cyclic_interval_ms(self) -> int:
-        return int(self._s.value("cyclic/interval_ms", self.DEFAULT_CYCLIC_MS))
-
-    @cyclic_interval_ms.setter
-    def cyclic_interval_ms(self, v: int):
-        self._s.setValue("cyclic/interval_ms", int(v))
-
-    # convenience
-    def sync(self):
-        """Force write to disk."""
-        self._s.sync()
-
-    #def file_path(self) -> str:
-    #    """Physical INI path (useful for logging/help)."""
-    #    return self._s.fileName()
+from pyscopegrap.app_settings import AppSettings
+from pyscopegrap.scope_grabber import ScopeGrabber
 
 
 class GrabWorker(QThread):
@@ -157,7 +83,7 @@ class GrabWorker(QThread):
                 pass
 
 class PrefsDialog(QDialog):
-    BAUDS = [1200]
+    BAUDS = [AppSettings.DEFAULT_BAUD]
 
     def __init__(self, parent, tty: str, baud: int, fg: str, bg: str, cyclic_ms: int):
         super().__init__(parent)

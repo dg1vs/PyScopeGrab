@@ -23,9 +23,8 @@ import os
 import argparse
 import logging
 
-from app_settings import AppSettings
-from scope_grabber import ScopeGrabber
-
+from pyscopegrap.app_settings import AppSettings
+from pyscopegrap.scope_grabber import ScopeGrabber
 
 # -----------------
 # Logging
@@ -73,28 +72,26 @@ def process_arguments():
     """Parse CLI flags.
     regarding action="store_true" https://stackoverflow.com/questions/8203622/argparse-store-false-if-unspecified
     """
-
+    settings_for_help = AppSettings()
     p = argparse.ArgumentParser(
         prog='PyScopeGrap',
         description='Handles communication with Fluke 105 (CLI or --withgui)'
     )
     # Communication
     p.add_argument('-t', '--tty', dest='tty', help='serial port to use', default=None)
-    p.add_argument('-b', '--baud', dest='baud', help='Baudrate [1200]', default=None)
+    p.add_argument('-b', '--baud', dest='baud', help=f'Baudrate [default: {settings_for_help.baud}]', default=None)
 
     # Actions (keep original truthiness: default True → do it; flag sets False)
     p.add_argument('-i', '--info',   help='retrieve info about the scope',     action='store_true')
     p.add_argument('-s', '--status', help='retrieve status info about the scope', action='store_false')
-    p.add_argument('-g', '--grab',   help='grab the screen of the scope',      action='store_false')
-    p.add_argument('-w', '--wait',   help='wait for start print from the scope', action='store_true')
 
     # Output
     p.add_argument('-o', '--out',  dest='out',  help='output-file')
-    p.add_argument('-a', '--auto', dest='auto', help='auto display image', action='store_true')
+    p.add_argument('-a', '--auto', dest='auto', help='open the grabbed image with the system viewer', action='store_true')
 
     # Colors
-    p.add_argument('-f', '--foreground', dest='fg', help='foreground color in #rrggbb', default=None)
-    p.add_argument('-y', '--background', dest='bg', help='background color in #rrggbb', default=None)
+    p.add_argument('-f', '--foreground', dest='fg', help=f'foreground color in #rrggbb [default: {settings_for_help.fg}]', default=None)
+    p.add_argument('-y', '--background', dest='bg', help=f'background color in #rrggbb [default: {settings_for_help.bg}]', default=None)
 
     # Misc
     p.add_argument('-v', '--verbose', help='increase output verbosity', action='store_true')
@@ -107,6 +104,11 @@ def process_arguments():
     p.add_argument('--no-settings', help='ignore config file defaults', action='store_true')
     p.add_argument('--save-settings', help='save provided options to the user config', action='store_true')
 
+    act = p.add_mutually_exclusive_group()
+    act.add_argument('-g', '--grab', action='store_true', default=True, help='grab screen now (default)')
+    act.add_argument('-w', '--wait', action='store_true', help='wait for PRINT event from device')
+
+
     return p.parse_args()
 
 def check_arguments(opt, LOG):
@@ -117,8 +119,8 @@ def check_arguments(opt, LOG):
 
     if opt.grab and opt.wait:
         LOG.error("It doesn't make sense to have wait and grab enabled the same time")
+        print("It doesn't make sense to have wait and grab enabled the same time")
         sys.exit(20)
-
 
 # -----------------
 # GUI launcher (only when --withgui)
@@ -149,7 +151,7 @@ def run_gui_from_separate_file(args, LOG):
 # -----------------
 # Main
 # -----------------
-if __name__ == '__main__':
+def main() -> int:
     args = process_arguments()
     LOG = init_logger(args)
     LOG.info('PyScopeGrap')
@@ -164,12 +166,13 @@ if __name__ == '__main__':
         if args.bg is None: args.bg = settings.bg
         if args.comment is None: args.comment = ""  # comment default if omitted
     else:
-        # maintain previous hardcoded defaults if ignoring settings
-        if args.tty is None: args.tty = '/dev/ttyUSB0' if os.name != 'nt' else 'COM3'
-        if args.baud is None: args.baud = 1200
-        if args.fg is None: args.fg = '#222222'
-        if args.bg is None: args.bg = '#b1e580'
+        # ignore saved INI, but still source defaults from AppSettings constants
+        if args.tty is None: args.tty = AppSettings.DEFAULT_PORT
+        if args.baud is None: args.baud = AppSettings.DEFAULT_BAUD
+        if args.fg is None: args.fg = AppSettings.DEFAULT_FG
+        if args.bg is None: args.bg = AppSettings.DEFAULT_BG
         if args.comment is None: args.comment = ""
+
 
     # ---- CLI mode (default; unchanged behavior) ----
     check_arguments(args, LOG)
@@ -189,6 +192,8 @@ if __name__ == '__main__':
     if args.withgui:
         run_gui_from_separate_file(args, LOG)  # never returns
 
+    if not hasattr(args, 'bg') or args.bg is None: args.bg = settings.bg
+    if not hasattr(args, 'fg') or args.fg is None: args.fg = settings.fg
 
     grab = ScopeGrabber(tty=args.tty, baud=int(args.baud), logger=LOG)
     grab.initialize_port()
@@ -199,10 +204,9 @@ if __name__ == '__main__':
     if args.status:
         grab.get_status()
 
+
     if args.wait:
         print("Waiting for print job… Press PRINT on the ScopeMeter.")
-        if not hasattr(args, 'bg') or args.bg is None: args.bg = '#b1e580'
-        if not hasattr(args, 'fg') or args.fg is None: args.fg = '#222222'
         img = grab.wait_for_print_image(fg=args.fg, bg=args.bg, comment=(args.comment or ""))
         if args.out:
             pnginfo = grab.make_pnginfo(img)
@@ -212,14 +216,7 @@ if __name__ == '__main__':
             img.show()
 
     if args.grab:
-        # Make sure the arg namespace has the fields expected by the class
-        if not hasattr(args, 'bg'):
-            args.bg = '#b1e580'
-        if not hasattr(args, 'fg'):
-            args.fg = '#222222'
-
         img = grab.get_screenshot_image(fg=args.fg, bg=args.bg, comment=(args.comment or ""))
-
         if args.out:
             pnginfo = grab.make_pnginfo(img)
             img.save(args.out, "PNG", pnginfo=pnginfo)
@@ -228,3 +225,6 @@ if __name__ == '__main__':
             img.show()
 
     sys.exit(0)
+
+if __name__ == '__main__':
+    raise SystemExit(main())

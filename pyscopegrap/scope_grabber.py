@@ -183,7 +183,7 @@ class ScopeGrabber:
         identity = identity.split(b';')
         self.LOG.debug(identity)
         if len(identity) != 6:  # 6 is for fluke 105
-            self.LOG.warning('error: unable to decode identity strin')
+            self.LOG.warning('error: unable to decode identity string')
             sys.exit(1)
 
         model = identity[0].decode()

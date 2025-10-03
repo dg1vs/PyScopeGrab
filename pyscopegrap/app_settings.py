@@ -14,10 +14,10 @@ class AppSettings:
     APP = "Fluke105"
 
     DEFAULT_PORT = "COM3" if sys.platform.startswith("win") else "/dev/ttyUSB0"
-    DEFAULT_BAUD = 19200
+    DEFAULT_BAUD = 1200
     DEFAULT_FG = "#222222"
     DEFAULT_BG = "#b1e580"
-    DEFAULT_CYCLIC_MS = 3000  # 3s
+    DEFAULT_CYCLIC_MS = 5000  # 3s
 
     def __init__(self):
         self._s = QSettings(QSettings.Format.IniFormat,
