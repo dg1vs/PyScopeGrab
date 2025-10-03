@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyscopegrap"
+version = "0.1.0"
+description = "Serial capture & PNG export for Fluke ScopeMeter 105 (CLI + optional PyQt6 GUI)."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "Your Name" }
+]
+keywords = ["fluke", "scopemeter", "serial", "pillow", "pyserial", "qt", "pyqt6", "screenshot"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: OS Independent",
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: System :: Hardware :: Universal Serial Bus (USB)",
+  "Intended Audience :: Science/Research",
+  "Environment :: Console",
+  "Environment :: X11 Applications :: Qt",
+]
+
+dependencies = [
+  "pyserial>=3.5",
+  "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+gui = ["PyQt6>=6.5"]
+
+[project.scripts]
+pyscopegrap = "pyscopegrap.PyScopeGrap:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["pyscopegrap"]
+
+[tool.setuptools.package-data]
+pyscopegrap = []
