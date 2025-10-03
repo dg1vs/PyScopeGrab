@@ -40,3 +40,4 @@ packages = ["pyscopegrap"]
 
 [tool.setuptools.package-data]
 pyscopegrap = []
+pyscopegrap = ["ui/*.ui"]

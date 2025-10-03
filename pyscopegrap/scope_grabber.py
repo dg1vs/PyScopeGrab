@@ -9,8 +9,49 @@ from typing import Optional, Tuple
 import serial
 from PIL import Image, PngImagePlugin
 
+DIGIT0, DIGIT9 = ord('0'), ord('9')
 
 class ScopeGrabber:
+
+    def sniff(self, seconds: float, dump_to: str | None = None, echo: bool = True):
+        """Sniff raw bytes on the serial line for `seconds` seconds.
+        No commands sent; writes to `dump_to` if provided, else prints hex lines.
+        """
+        import serial, time
+        if self.port is None or not getattr(self.port, "is_open", False):
+            self.LOG.info("Opening %s at %d for sniff (no commands sent)", self.tty, self.baud)
+            self.port = serial.Serial(self.tty, self.baud, timeout=0.1)
+        else:
+            self.port.timeout = 0.1
+
+        fh = None
+        if dump_to:
+            try:
+                fh = open(dump_to, "wb")
+                self.LOG.info("Sniff: dumping to %s", dump_to)
+            except Exception as e:
+                self.LOG.warning("Sniff: cannot open %s: %s", dump_to, e)
+        start = time.time()
+        total = 0
+        try:
+            while time.time() - start < seconds:
+                chunk = self.port.read(1024)
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if fh:
+                    fh.write(chunk)
+                elif echo:
+                    hexline = " ".join(f"{b:02x}" for b in chunk[:32])
+                    print(hexline + (" ..." if len(chunk) > 32 else ""))
+            self.LOG.info("Sniff complete: %d bytes", total)
+        finally:
+            if fh:
+                try:
+                    fh.flush(); fh.close()
+                except Exception:
+                    pass
+
     """
     Fluke ScopeMeter 105 grabber (protocol + decoding).
     OS-independent: uses pyserial and Pillow only.
@@ -87,15 +128,14 @@ class ScopeGrabber:
         import serial  # local import keeps module OS-independent and light
         self.LOG.info('Opening and configuring serial port...')
         self.port = serial.Serial(self.tty, 1200, timeout=timeout)  # device default
-        print('done')  # preserving original user feedback
+        self.LOG.info('Init with 1200 done')  # preserving original user feedback
 
-        print(self.baud)
         # Try fast path first (no hard abort), then strict:
         status = self.send_command('PC 19200', timeout=False)
         self.port.baudrate = 19200
         if status is False:
             self.send_command('PC 19200', timeout=True)
-        print('done')
+        self.LOG.info('Switching to 19200 done')
         return self.port
 
     def close(self):
@@ -226,7 +266,7 @@ class ScopeGrabber:
             input_buf.append(byte[0])
         self.LOG.debug(input_buf)
 
-        ##KI status = int(input_buf)
+        #Todo status = int(input_buf)
         status = int(bytes(input_buf).decode("ascii"))
         self.LOG.debug(status)
 
@@ -236,7 +276,7 @@ class ScopeGrabber:
 
         return status
 
-    DIGIT0, DIGIT9 = ord('0'), ord('9')
+
 
     def wait_for_print_image(self, *, fg: str, bg: str, comment: str):
         assert self.port is not None
@@ -305,7 +345,7 @@ class ScopeGrabber:
                 payload_len = 7454
 
             epson = self.port.read(payload_len)
-            ##KI crc_from_device = int.from_bytes(self.port.read(1))
+            #Todo crc_from_device = int.from_bytes(self.port.read(1))
             crc_from_device = self.port.read(1)[0]
 
             if crc_from_device != self.calculate_checksum(epson):

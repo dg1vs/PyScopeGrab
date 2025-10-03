@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-#from tempfile import NamedTemporaryFile
-#from types import SimpleNamespace
-
 # Qt6 (PyQt6)
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal as Signal, pyqtSlot as Slot
 #from PyQt6.QtCore import QSettings
@@ -18,15 +13,9 @@ from PyQt6.QtWidgets import (
 from io import BytesIO
 from PyQt6.QtGui import QPixmap
 
-# pyserial for enumerating ports
-try:
-    from serial.tools import list_ports
-except Exception:
-    list_ports = None
-
 from pyscopegrap.app_settings import AppSettings
 from pyscopegrap.scope_grabber import ScopeGrabber
-
+from pyscopegrap.prefs_dialog import PrefsDialog
 
 class GrabWorker(QThread):
     """Runs serial I/O off the UI thread."""
@@ -82,173 +71,11 @@ class GrabWorker(QThread):
             except Exception:
                 pass
 
-class PrefsDialog(QDialog):
-    BAUDS = [AppSettings.DEFAULT_BAUD]
-
-    def __init__(self, parent, tty: str, baud: int, fg: str, bg: str, cyclic_ms: int):
-        super().__init__(parent)
-        self.setWindowTitle("Preferences")
-        self.setModal(True)
-
-        # --- Serial Port ---
-        self.cb_tty = QComboBox()
-
-        # Populate with the INI value pre-selected
-        self._populate_ports(prefer=tty)
-
-        self.btn_refresh = QPushButton("Refresh")
-        self.btn_refresh.clicked.connect(lambda: self._populate_ports(prefer=self._current_device()))
-
-        self._populate_ports()
-        if tty and self._index_of_port(tty) == -1:
-            self.cb_tty.insertItem(0, tty)
-            self.cb_tty.setCurrentIndex(0)
-
-        # --- Baud rate ---
-        self.cb_baud = QComboBox()
-        for b in self.BAUDS:
-            self.cb_baud.addItem(str(b), b)
-        idx = self.cb_baud.findData(int(baud))
-        self.cb_baud.setCurrentIndex(idx if idx >= 0 else 0)
-
-        # --- Colors ---
-        self.btn_fg = QPushButton()
-        self.btn_fg.clicked.connect(lambda: self._pick_color(self.btn_fg))
-        self._apply_color_to_button(self.btn_fg, fg)
-        self.btn_fg.setToolTip("Choose foreground color")
-        self.le_fg = QLineEdit(fg); self.le_fg.setReadOnly(True)
-
-        self.btn_bg = QPushButton()
-        self.btn_bg.clicked.connect(lambda: self._pick_color(self.btn_bg))
-        self._apply_color_to_button(self.btn_bg, bg)
-        self.btn_bg.setToolTip("Choose background color")
-        self.le_bg = QLineEdit(bg); self.le_bg.setReadOnly(True)
-
-        # --- Cyclic interval (seconds) ---
-        self.sb_interval = QSpinBox()
-        self.sb_interval.setRange(1, 3600)   # 1..3600 seconds
-        self.sb_interval.setSuffix(" s")
-        self.sb_interval.setValue(max(1, int(cyclic_ms / 1000)))
-
-        # Layout
-        form = QFormLayout()
-
-        port_row = QHBoxLayout(); port_row.addWidget(self.cb_tty, 1); port_row.addWidget(self.btn_refresh, 0)
-        port_wrap = QWidget(); port_wrap.setLayout(port_row)
-        form.addRow("Serial port:", port_wrap)
-
-        form.addRow("Baud rate:", self.cb_baud)
-
-        fg_row = QHBoxLayout(); fg_row.addWidget(self.btn_fg, 0); fg_row.addWidget(self.le_fg, 1)
-        fg_wrap = QWidget(); fg_wrap.setLayout(fg_row)
-        form.addRow("Foreground:", fg_wrap)
-
-        bg_row = QHBoxLayout(); bg_row.addWidget(self.btn_bg, 0); bg_row.addWidget(self.le_bg, 1)
-        bg_wrap = QWidget(); bg_wrap.setLayout(bg_row)
-        form.addRow("Background:", bg_wrap)
-
-        form.addRow("Cyclic interval:", self.sb_interval)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-
-        layout = QVBoxLayout()
-        layout.addLayout(form)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-
-    def _current_device(self) -> str:
-        """Return the currently selected device path (e.g. '/dev/ttyUSB0' or 'COM3')."""
-        return self.cb_tty.currentData() or self.cb_tty.currentText().split(" — ")[0]
-
-    def _populate_ports(self, prefer: str | None = None):
-        """Fill the combobox with available ports and select 'prefer' if found."""
-        # Remember currently selected (so Refresh can preserve when prefer is None)
-        if prefer is None:
-            prefer = self._current_device()
-
-        self.cb_tty.blockSignals(True)  # avoid spurious signals while refilling
-        self.cb_tty.clear()
-
-        ports = []
-        if list_ports is not None:
-            try:
-                ports = list(list_ports.comports())
-            except Exception:
-                ports = []
-
-        selected_index = -1
-        if ports:
-            for i, p in enumerate(ports):
-                dev = p.device
-                display = f"{dev} — {p.description or 'Serial'}"
-                self.cb_tty.addItem(display, dev)
-                if prefer and dev == prefer:
-                    selected_index = i
-            if selected_index >= 0:
-                self.cb_tty.setCurrentIndex(selected_index)
-            else:
-                # If preferred device not in list, insert it at top so user sees it
-                if prefer:
-                    self.cb_tty.insertItem(0, prefer, prefer)
-                    self.cb_tty.setCurrentIndex(0)
-                else:
-                    self.cb_tty.setCurrentIndex(0)
-        else:
-            # No ports found; still show the preferred or a sensible guess
-            if not prefer:
-                prefer = "COM3" if sys.platform.startswith("win") else "/dev/ttyUSB0"
-            self.cb_tty.addItem(prefer, prefer)
-            self.cb_tty.setCurrentIndex(0)
-
-        self.cb_tty.blockSignals(False)
-
-    def _index_of_port(self, device: str) -> int:
-        for i in range(self.cb_tty.count()):
-            if self.cb_tty.itemData(i) == device or self.cb_tty.itemText(i).startswith(device):
-                return i
-        return -1
-
-    def _apply_color_to_button(self, button: QPushButton, color_hex: str):
-        # Normalize hex like "#RRGGBB"
-        if not color_hex.startswith("#"):
-            color_hex = "#" + color_hex
-        button.setText(color_hex.upper())
-        button.setMinimumWidth(120)
-        button.setMinimumHeight(28)
-        button.setStyleSheet(
-            f"QPushButton {{"
-            f"  background-color: {color_hex};"
-            f"  border: 1px solid #666;"
-            f"  border-radius: 6px;"
-            f"}}"
-        )
-
-    def _pick_color(self, button: QPushButton):
-        initial = button.text().strip()
-        col = QColor(initial) if initial else QColor("#000000")
-        chosen = QColorDialog.getColor(col, self, "Select color",
-                                       options=QColorDialog.ColorDialogOption.ShowAlphaChannel)
-        if chosen.isValid():
-            hex_rgb = chosen.name()  # "#RRGGBB"
-            self._apply_color_to_button(button, hex_rgb)
-            if button is self.btn_fg:
-                self.le_fg.setText(hex_rgb)
-            else:
-                self.le_bg.setText(hex_rgb)
-
-    def values(self):
-        tty = self.cb_tty.currentData() or self.cb_tty.currentText().split(" — ")[0]
-        baud = int(self.cb_baud.currentData())
-        fg = self.le_fg.text().strip()
-        bg = self.le_bg.text().strip()
-        cyclic_ms = int(self.sb_interval.value()) * 1000
-        return tty, baud, fg, bg, cyclic_ms
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, tty: str | None = None, baud: int = 19200, fg="#222222", bg="#b1e580", comment=""):
+    #def __init__(self, tty: str | None = None, baud: int = 19200, fg="#222222", bg="#b1e580", comment=""):
+    def __init__(self, tty: str | None = None, fg="#222222", bg="#b1e580", comment=""):
         super().__init__()
         self.setWindowTitle("PyScopeGrap – Fluke 105")
         self.resize(1000, 600)
@@ -257,14 +84,14 @@ class MainWindow(QMainWindow):
         self.settings = AppSettings()
 
         # Defaults (fallback if CLI passed None)
-        if tty is None:
-            tty = self.settings.port
-        if baud is None:
-            baud = self.settings.baud
+        #if tty is None:
+        #    tty = self.settings.port
+        #if baud is None:
+        #    baud = self.settings.baud
 
         # Apply from settings (CLI values override if provided explicitly)
         self.tty = tty or self.settings.port
-        self.baud = int(baud or self.settings.baud)
+        self.baud = int(self.settings.baud)
         self.fg = fg or self.settings.fg
         self.bg = bg or self.settings.bg
         self.cyclic_interval_ms = self.settings.cyclic_interval_ms
