@@ -8,8 +8,10 @@ from PyQt6.QtGui import QAction, QPixmap, QColor
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QFileDialog, QMessageBox, QStatusBar, QDialog, QFormLayout, QLineEdit,
-    QDialogButtonBox, QFrame, QComboBox, QColorDialog, QSpinBox
+    QDialogButtonBox, QFrame, QComboBox, QColorDialog, QSpinBox, QSizePolicy, QLabel, QSizePolicy, QLayout,
+    QTabWidget
 )
+
 from io import BytesIO
 from PyQt6.QtGui import QPixmap
 
@@ -74,7 +76,6 @@ class GrabWorker(QThread):
 
 
 class MainWindow(QMainWindow):
-    #def __init__(self, tty: str | None = None, baud: int = 19200, fg="#222222", bg="#b1e580", comment=""):
     def __init__(self, tty: str | None = None, fg="#222222", bg="#b1e580", comment=""):
         super().__init__()
         self.setWindowTitle("PyScopeGrap – Fluke 105")
@@ -100,9 +101,15 @@ class MainWindow(QMainWindow):
         self._worker: GrabWorker | None = None
 
         # central image view
-        self.image_label = QLabel("File → Preferences to set the port, then click Grab.")
+        self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setMinimumSize(480, 480)
+        self.image_label.setFixedSize(480, 480)  # <-- fixed preview area
+        self.image_label.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)  # don't grow
+        self.image_label.setContentsMargins(0, 0, 0, 0)
+
+        # style: bg color + black frame; no placeholder text
+        self._apply_placeholder_style()
 
         # buttons
         self.btn_grab = QPushButton("Grab")
@@ -123,6 +130,9 @@ class MainWindow(QMainWindow):
         lay = QHBoxLayout(central)
         lay.addWidget(self.image_label, 1)
         lay.addLayout(right_box)
+
+        lay.setContentsMargins(8, 8, 8, 8)
+
         self.setCentralWidget(central)
 
         # timer for cyclic scanning
@@ -152,6 +162,39 @@ class MainWindow(QMainWindow):
 
         # menus
         self._make_menus()
+
+        # prevent layout from trying to expand
+        self.centralWidget().layout().setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+
+        # size the window to fit central + toolbars/menubar/statusbar, then lock it
+        self.adjustSize()
+        self.setFixedSize(self.size())
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self._update_preview_pixmap()
+
+    def _apply_placeholder_style(self) -> None:
+        self.image_label.clear()
+        self.image_label.setStyleSheet(
+            f"background-color: {self.bg};"
+            "border: 2px solid black;"
+            "padding: 2px;"  # <- keep image inside the border
+        )
+
+    def _update_preview_pixmap(self):
+        """Scale the original pixmap to the label's available content area."""
+        pm = getattr(self, "_orig_pixmap", None)
+        if not pm or pm.isNull():
+            return
+        # contentsRect accounts for borders; use that size for scaling
+        target = self.image_label.contentsRect().size()
+        scaled = pm.scaled(
+            target,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.image_label.setPixmap(scaled)
 
     def _make_menus(self):
         m_file = self.menuBar().addMenu("&File")
@@ -197,6 +240,9 @@ class MainWindow(QMainWindow):
             self.lbl_port.setText(f"Port: {self.tty}")
             self._timer.setInterval(self.cyclic_interval_ms)
             self._update_status()
+
+            # after updating self.fg/self.bg and syncing settings...
+            self._apply_placeholder_style()
 
     def closeEvent(self, ev):
         # Persist current values on exit (extra safety)
@@ -261,9 +307,7 @@ class MainWindow(QMainWindow):
 
     @Slot(object)
     def on_grabbed_img(self, img):
-        # Keep the Pillow Image for Save...
         self.last_img = img
-        # Convert to PNG bytes in memory (safer than ImageQt on some systems)
         buf = BytesIO()
         try:
             pnginfo = ScopeGrabber.make_pnginfo(img)
@@ -271,17 +315,13 @@ class MainWindow(QMainWindow):
         except Exception:
             img.save(buf, "PNG")
         data = buf.getvalue()
-        # Preview from bytes
+
         pm = QPixmap()
         pm.loadFromData(data, "PNG")
         if not pm.isNull():
-            pm = pm.scaled(
-                480, 480,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            self.image_label.setPixmap(pm)
-        self._update_status("Idle")
+            # Keep original, then scale to the content area (excludes border/padding)
+            self._orig_pixmap = pm
+            self._update_preview_pixmap()  # this already uses contentsRect()
 
     @Slot(str)
     def _on_error(self, msg: str):
