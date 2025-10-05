@@ -12,46 +12,6 @@ from PIL import Image, PngImagePlugin
 DIGIT0, DIGIT9 = ord('0'), ord('9')
 
 class ScopeGrabber:
-
-    def sniff(self, seconds: float, dump_to: str | None = None, echo: bool = True):
-        """Sniff raw bytes on the serial line for `seconds` seconds.
-        No commands sent; writes to `dump_to` if provided, else prints hex lines.
-        """
-        import serial, time
-        if self.port is None or not getattr(self.port, "is_open", False):
-            self.LOG.info("Opening %s at %d for sniff (no commands sent)", self.tty, self.baud)
-            self.port = serial.Serial(self.tty, self.baud, timeout=0.1)
-        else:
-            self.port.timeout = 0.1
-
-        fh = None
-        if dump_to:
-            try:
-                fh = open(dump_to, "wb")
-                self.LOG.info("Sniff: dumping to %s", dump_to)
-            except Exception as e:
-                self.LOG.warning("Sniff: cannot open %s: %s", dump_to, e)
-        start = time.time()
-        total = 0
-        try:
-            while time.time() - start < seconds:
-                chunk = self.port.read(1024)
-                if not chunk:
-                    continue
-                total += len(chunk)
-                if fh:
-                    fh.write(chunk)
-                elif echo:
-                    hexline = " ".join(f"{b:02x}" for b in chunk[:32])
-                    print(hexline + (" ..." if len(chunk) > 32 else ""))
-            self.LOG.info("Sniff complete: %d bytes", total)
-        finally:
-            if fh:
-                try:
-                    fh.flush(); fh.close()
-                except Exception:
-                    pass
-
     """
     Fluke ScopeMeter 105 grabber (protocol + decoding).
     OS-independent: uses pyserial and Pillow only.
@@ -131,12 +91,22 @@ class ScopeGrabber:
         self.LOG.info('Init with 1200 done')  # preserving original user feedback
 
         # Try fast path first (no hard abort), then strict:
-        status = self.send_command('PC 19200', timeout=False)
+        status = self.send_command('PC19200,N,8,1', timeout=False)
         self.port.baudrate = 19200
         if status is False:
-            self.send_command('PC 19200', timeout=True)
+            self.send_command('PC19200,N,8,1', timeout=True)
         self.LOG.info('Switching to 19200 done')
         return self.port
+
+    def open_passive(self, baud: int | None = None, timeout: float = 1.0):
+        """Open serial port without sending any commands (stay at given baud)."""
+        import serial
+        b = int(baud or self.baud or 1200)
+        self.port = serial.Serial(self.tty, b, timeout=timeout)
+        self.baud = self.port.baudrate
+        self.LOG.info("Opened %s at %d (passive)", self.tty, self.baud)
+        return self.port
+
 
     def close(self):
         if self.port and self.port.is_open:
@@ -228,8 +198,8 @@ class ScopeGrabber:
 
         model = identity[0].decode()
         firmware = identity[1].decode()
-        print('     Model: ' + model)
-        print('   Version:' + firmware)
+        self.LOG.info('     Model: ' + model)
+        self.LOG.info('   Version:' + firmware)
 
     def get_status(self):
         """Request status ('IS'), decode numeric bitfield, and print set bits.
@@ -272,61 +242,15 @@ class ScopeGrabber:
 
         for pos, text in status_text.items():
             if status & (1 << pos):
-                print(f"Bit {pos} set: {text}")
+                self.LOG.info(f"Bit {pos} set: {text}")
 
         return status
-
-
-
-    def wait_for_print_image(self, *, fg: str, bg: str, comment: str):
-        assert self.port is not None
-        old_timeout = self.port.timeout
-        try:
-            self.port.timeout = None
-            self.LOG.info("Waiting for print stream… press PRINT on the ScopeMeter")
-            # sync to 'dddd,'
-            digits = bytearray()
-            while True:
-                x = self.port.read(1)[0]
-                if DIGIT0 <= x <= DIGIT9:
-                    digits.append(x)
-                    if len(digits) > 4:
-                        digits.pop(0)
-                    continue
-                if x == ord(',') and len(digits) == 4:
-                    try:
-                        n = int(digits.decode('ascii'))
-                    except Exception:
-                        digits.clear();
-                        continue
-                    if 1024 <= n <= 65535:
-                        payload_len = n
-                        break
-                    digits.clear()
-                else:
-                    digits.clear()
-            epson = self.port.read(payload_len)
-            crc = self.port.read(1)
-            if crc:
-                dev = crc[0];
-                calc = self.calculate_checksum(epson)
-                if dev != calc:
-                    self.LOG.warning("CRC mismatch: device=%d calc=%d", dev, calc)
-            img = self.generate_image(epson, fg=fg, bg=bg)
-            img.info.setdefault("png_text", {
-                "Generator": "PyScopeGrap V0.1",
-                "Description": "Exported from Fluke 105 (PRINT)",
-                "Extra text": comment or "",
-            })
-            return img
-        finally:
-            self.port.timeout = old_timeout
 
 
     def get_screenshot_image(self, *, fg: str, bg: str, comment: str) -> Image.Image:
         """Fetch raw EPSON bytes over serial and return a Pillow Image (no disk I/O)."""
         assert self.port is not None
-        print('Downloading screenshot from ScopeMeter...')
+        self.LOG.info('Downloading screenshot from ScopeMeter...')
 
         old_timeout = self.port.timeout
         try:
@@ -421,6 +345,62 @@ class ScopeGrabber:
         for k, v in img.info.get("png_text", {}).items():
             pi.add_text(k, v)
         return pi
+
+    def _read_ascii_line(self) -> str:
+        """Read ASCII data until <CR>; abort on timeout like other methods."""
+        assert self.port is not None
+        buf = bytearray()
+        while True:
+            b = self.port.read()
+            if len(b) != 1:
+                self.LOG.warning('error: timeout while receiving data')
+                sys.exit(1)
+            if b[0] == ord('\r'):
+                break
+            buf.append(b[0])
+        return bytes(buf).decode("ascii").strip()
+
+    def query_measurement(self, field: int = 1, numeric_only: bool = False):
+        """
+        Passive meter read using QM<field>[,V].
+        Returns:
+          - If numeric_only: float
+          - Else: (meas_type:str, value:float, unit:str)
+        """
+        assert self.port is not None
+        if field < 1 or field > 12:
+            self.LOG.warning("QM field out of METER range (1..12)"); sys.exit(2)
+
+        cmd = f"QM{field}" + (",V" if numeric_only else "")
+        self.send_command(cmd)  # ACK 0 continues with data (terminated by <CR>)
+        line = self._read_ascii_line()
+
+        if numeric_only:
+            return float(line)
+
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) != 3:
+            self.LOG.warning(f"unexpected QM response: {line}")
+            sys.exit(2)
+        t, v, u = parts
+        return t, float(v), u
+
+    def read_identity_fields(self) -> list[str]:
+        """Return the 6 semicolon-separated ID fields as strings."""
+        assert self.port is not None
+        self.send_command('ID')
+        line = self._read_ascii_line()  # reads until CR
+        parts = [p.strip() for p in line.split(';')]
+        if len(parts) != 6:
+            self.LOG.warning('unexpected identity response: %r', line)
+            sys.exit(1)
+        return parts  # [model, fw, date, lang1, lang2, ...]
+
+    def scpi_idn_string(self) -> str:
+        """Return a SCPI-style *IDN? string: 'FLUKE,<model>,-,<fw>'."""
+        model, fw, *_ = self.read_identity_fields()
+        return f"FLUKE,{model},-,{fw}"
+
 
     # def get_screenshot(self, options):
     #     """Run 'QP' to fetch a screenshot and render it via generate_screenshot().

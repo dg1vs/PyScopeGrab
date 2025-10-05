@@ -9,7 +9,7 @@ description = "Serial capture & PNG export for Fluke ScopeMeter 105 (CLI + optio
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
-  { name = "Your Name" }
+  { name = "dg1vs" }
 ]
 keywords = ["fluke", "scopemeter", "serial", "pillow", "pyserial", "qt", "pyqt6", "screenshot"]
 classifiers = [

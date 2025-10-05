@@ -3,9 +3,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import importlib.resources as res
+from math import sqrt
 
 from PyQt6 import uic
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import (
     QDialog, QDialogButtonBox, QColorDialog, QComboBox, QPushButton, QLineEdit, QSpinBox
 )
@@ -72,7 +73,10 @@ class PrefsDialog(QDialog):
         self._apply_color_to_button(self.btn_fg, fg); self.le_fg.setText(fg)
         self._apply_color_to_button(self.btn_bg, bg); self.le_bg.setText(bg)
 
-        # Interval
+        # Interval (stored in ms; shown in seconds)
+        self.sb_interval.setRange(1, 60)  # 1 s … 60 s
+        self.sb_interval.setSingleStep(1)
+        self.sb_interval.setSuffix(" s")
         self.sb_interval.setValue(max(1, int(cyclic_ms / 1000)))
 
     # ---- Helpers ----
@@ -110,10 +114,15 @@ class PrefsDialog(QDialog):
                 else:
                     self.cb_tty.setCurrentIndex(0)
         else:
+            # explicit “no ports found” hint, but keep an editable sensible default
             if not prefer:
                 prefer = "COM3" if sys.platform.startswith("win") else "/dev/ttyUSB0"
-            self.cb_tty.addItem(prefer, prefer)
+            display = f"{prefer} — (no ports found)"
+            self.cb_tty.addItem(display, prefer)
             self.cb_tty.setCurrentIndex(0)
+            self.cb_tty.setToolTip("No serial ports were detected. You can still type a device path manually.")
+            # Optional: allow manual typing if your .ui sets it to non-editable
+            # self.cb_tty.setEditable(True)
 
         self.cb_tty.blockSignals(False)
 
@@ -126,16 +135,26 @@ class PrefsDialog(QDialog):
     def _apply_color_to_button(self, button: QPushButton, color_hex: str):
         if not color_hex.startswith("#"):
             color_hex = "#" + color_hex
-        button.setText(color_hex.upper())
+        color = QColor(color_hex)
+        if not color.isValid():
+            color = QColor("#000000")
+
+        # Compute a simple contrast-aware text color (WCAG-ish luminance)
+        r, g, b, _ = color.getRgb()
+        luminance = 0.2126 * (r / 255.0) + 0.7152 * (g / 255.0) + 0.0722 * (b / 255.0)
+        text_color = QColor("#000000") if luminance > 0.6 else QColor("#FFFFFF")
+
+        pal = QPalette(button.palette())
+        pal.setColor(QPalette.ColorRole.Button, color)
+        pal.setColor(QPalette.ColorRole.ButtonText, text_color)
+        button.setAutoFillBackground(True)
+        button.setPalette(pal)
+
+        # Visible label + usability tweaks
+        button.setText(color.name(QColor.NameFormat.HexRgb).upper())
         button.setMinimumWidth(120)
         button.setMinimumHeight(28)
-        button.setStyleSheet(
-            f"QPushButton {{"
-            f"  background-color: {color_hex};"
-            f"  border: 1px solid #666;"
-            f"  border-radius: 6px;"
-            f"}}"
-        )
+        button.setToolTip(f"Current color: {button.text()}")
 
     def _pick_color(self, button: QPushButton, line: QLineEdit):
         initial = button.text().strip() or line.text().strip()

@@ -25,47 +25,8 @@ import logging
 
 from pyscopegrap.app_settings import AppSettings
 from pyscopegrap.scope_grabber import ScopeGrabber
-
-# -----------------
-# Logging
-# -----------------
-# def init_logger(opt):
-#     """Configure module logger.
-#
-#     Behavior:
-#       - If --logging is not set, attach a NullHandler so LOG calls are no-ops.
-#       - If --logging is set, write to file (and optionally to STDERR for console).
-#       - Log level: DEBUG when --verbose, else INFO.
-#
-#     Rationale:
-#       - Avoid stdout contamination so piping binary output/prints remains clean.
-#       - Clearing handlers prevents duplicate logs when script is reloaded.
-#     """
-#
-#     logger = logging.getLogger("PyScopeGrap")
-#     logger.handlers.clear()
-#     level = logging.DEBUG if getattr(opt, "verbose", False) else logging.INFO
-#     logger.setLevel(level)
-#
-#     # By default, stay silent (no stdout pollution)
-#     if not getattr(opt, "logging", False):
-#         logger.addHandler(logging.NullHandler())
-#         return logger
-#
-#     # File logger
-#     fmt = logging.Formatter('%(lineno)s -%(funcName)s %(levelname)s %(message)s')
-#     fh = logging.FileHandler('example.log', encoding='utf-8', mode='w')
-#     fh.setLevel(level)
-#     fh.setFormatter(fmt)
-#     logger.addHandler(fh)
-#
-#     # Optional console to STDERR (safe for piping)
-#     ch = logging.StreamHandler(sys.stderr)
-#     ch.setLevel(level)
-#     ch.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-#     logger.addHandler(ch)
-#
-#     return logger
+#from scope_gui_pyqt6 import run_gui
+from scpi_server import run_scpi_server, SCPIConfig
 
 
 def init_logger(opt):
@@ -108,6 +69,48 @@ def init_logger(opt):
 
     return logger
 
+# --- Defaults & settings resolution ------------------------------------------
+def apply_settings(args, settings, use_saved: bool = True) -> None:
+    """
+    Fill missing CLI args from either saved QSettings (use_saved=True)
+    or from AppSettings' compile-time defaults (use_saved=False).
+    Also normalizes a few fields and (optionally) persists back.
+    """
+    # Source for defaults
+    if use_saved:
+        defaults = {
+            "tty": settings.port,
+            "baud": settings.baud,
+            "fg": settings.fg,
+            "bg": settings.bg,
+            "comment": "",
+        }
+    else:
+        defaults = {
+            "tty": AppSettings.DEFAULT_PORT,
+            "baud": AppSettings.DEFAULT_BAUD,
+            "fg": AppSettings.DEFAULT_FG,
+            "bg": AppSettings.DEFAULT_BG,
+            "comment": "",
+        }
+
+    # Fill only when user did not pass a value
+    for key, val in defaults.items():
+        if getattr(args, key, None) is None:
+            setattr(args, key, val)
+
+    # Persist (only if explicitly requested)
+    if getattr(args, "save_settings", False):
+        settings.port = args.tty
+        try:
+            # keep tolerant while baud handling is being redesigned
+            settings.baud = int(args.baud)
+        except Exception:
+            pass
+        settings.fg = args.fg
+        settings.bg = args.bg
+        settings.sync()
+
 
 def process_arguments():
     """Parse CLI flags.
@@ -125,7 +128,7 @@ def process_arguments():
 
     # Actions (keep original truthiness: default True → do it; flag sets False)
     # p.add_argument('-i', '--info',   help='retrieve info about the scope',     action='store_true')  # disabled: identity is printed anyway
-    #p.add_argument('-s', '--status', help='retrieve status info about the scope', action='store_true')
+    # p.add_argument('-s', '--status', help='retrieve status info about the scope', action='store_true')
 
     # Output
     p.add_argument('-o', '--out',  dest='out',  help='output-file')
@@ -143,28 +146,20 @@ def process_arguments():
     p.add_argument('--quiet', help='suppress console log output', action='store_true')
     p.add_argument('--tap', dest='tap', help='dump all raw serial bytes to this file while waiting/reading', default=None)
 
-    # GUI toggle
-    p.add_argument('--withgui', help='launch Qt6 GUI (PyQt6)', action='store_true')
-
     p.add_argument('--no-settings', help='ignore config file defaults', action='store_true')
     p.add_argument('--save-settings', help='save provided options to the user config', action='store_true')
 
+    #Todo either gui or grab
     act = p.add_mutually_exclusive_group()
     act.add_argument('-g', '--grab', action='store_true', help='grab screen now')
-    act.add_argument('-w', '--wait', action='store_true', help='wait for PRINT event from device')
-    act.add_argument('--sniff', type=float, metavar='SECONDS', help='sniff raw serial for SECONDS (no commands sent)')
+    act.add_argument('--meter', action='store_true', help='print first meter value (QM1)')
+    act.add_argument('--withgui', help='launch Qt6 GUI (PyQt6)', action='store_true')
+    act.add_argument('--scpi-server', action='store_true', help='run SCPI server on 127.0.0.1:5025')
 
+    # SCPI network options
+    p.add_argument('--scpi-host', default='127.0.0.1', help='SCPI bind host [default: 127.0.0.1]')
+    p.add_argument('--scpi-port', type=int, default=5025, help='SCPI TCP port [default: 5025]')
     return p.parse_args()
-
-def check_arguments(opt, LOG):
-    """Validate incompatible options.
-    'grab' (immediate fetch) and 'wait' (idle until device prints) are mutually exclusive for now.
-    With the original flag semantics, grab=True by default; wait=False by default.
-    """
-
-    if opt.grab and opt.wait:
-        LOG.info("It doesn't make sense to have wait and grab enabled the same time")
-        sys.exit(20)
 
 # -----------------
 # GUI launcher (only when --withgui)
@@ -192,7 +187,6 @@ def run_gui_from_separate_file(args, LOG):
     w.show()
     sys.exit(app.exec())
 
-
 # -----------------
 # Main
 # -----------------
@@ -203,73 +197,29 @@ def main() -> int:
 
     # Load settings unless suppressed
     settings = AppSettings()
-    if not args.no_settings:
-        # Only fill values the user did NOT pass
-        if args.tty is None: args.tty = settings.port
-        #if args.baud is None: args.baud = settings.baud
-        if args.fg is None: args.fg = settings.fg
-        if args.bg is None: args.bg = settings.bg
-        if args.comment is None: args.comment = ""  # comment default if omitted
-    else:
-        # ignore saved INI, but still source defaults from AppSettings constants
-        if args.tty is None: args.tty = AppSettings.DEFAULT_PORT
-        #if args.baud is None: args.baud = AppSettings.DEFAULT_BAUD
-        if args.fg is None: args.fg = AppSettings.DEFAULT_FG
-        if args.bg is None: args.bg = AppSettings.DEFAULT_BG
-        if args.comment is None: args.comment = ""
-
-    # ---- Sniff mode (no commands) ----
-    if getattr(args, 'sniff', None):
-        baud = int(args.baud) if hasattr(args, 'baud') and args.baud else int(settings.baud)
-        LOG.info('Sniffing %s at %d baud for %.1f s', args.tty, baud, float(args.sniff))
-        sniffer = ScopeGrabber(tty=args.tty, baud=baud, logger=LOG)
-        sniffer.sniff(seconds=float(args.sniff), dump_to=args.tap, echo=(args.tap is None))
-        sys.exit(0)
-
-    # ---- CLI mode ----
-    # Default to grab if neither -g nor -w provided
-    if not getattr(args, 'grab', False) and not getattr(args, 'wait', False):
-        args.grab = True
-    check_arguments(args, LOG)
-
-    # Persist passed-in values if requested
-    if args.save_settings:
-        settings.port = args.tty
-        try:
-            settings.baud = int(args.baud)
-        except Exception:
-            pass
-        settings.fg = args.fg
-        settings.bg = args.bg
-        # If you later add --cyclic-interval to CLI, save it here too.
-        settings.sync()
+    apply_settings(args, settings, use_saved=not args.no_settings)
 
     if args.withgui:
         run_gui_from_separate_file(args, LOG)  # never returns
 
-    if not hasattr(args, 'bg') or args.bg is None: args.bg = settings.bg
-    if not hasattr(args, 'fg') or args.fg is None: args.fg = settings.fg
+    # Default to grab if neither action provided
+    if not getattr(args, 'grab', False) and not getattr(args, 'sniff', None) and not getattr(args, 'meter', False):
+        args.grab = True
 
     grab = ScopeGrabber(tty=args.tty, baud=19200, logger=LOG)  # baud fixed internally (1200→19200)
     grab.initialize_port()
-
     # Identity is printed by the class (kept as-is)
     grab.get_identity()
+
+    if args.scpi_server:
+        cfg = SCPIConfig(host=args.scpi_host, port=args.scpi_port)
+        run_scpi_server(cfg, grabber_factory=lambda: _make_grabber_from_args(args))
+        exit(0)
 
     #if args.status:
     #    grab.get_status()
 
-
-    if args.wait:
-        LOG.info("Waiting for print job… Press PRINT on the ScopeMeter.")
-        img = grab.wait_for_print_image(fg=args.fg, bg=args.bg, comment=(args.comment or " "), dump_to=args.tap)
-        if args.out:
-            pnginfo = grab.make_pnginfo(img)
-            img.save(args.out, "PNG", pnginfo=pnginfo)
-            LOG.info(args.out, "saved")
-        elif args.auto:
-            img.show()
-
+    # the minimal useful stuff, get the scope picture
     if args.grab:
         img = grab.get_screenshot_image(fg=args.fg, bg=args.bg, comment=(args.comment or ""))
         if args.out:
@@ -278,6 +228,19 @@ def main() -> int:
             LOG.info(args.out + " saved")
         elif args.auto:
             img.show()
+
+    # ----- Meter mode (passive) -----
+    if args.meter:
+        # We read QM1 with full triplet: "<type>,<value>,<unit>"
+        try:
+            mtype, value, unit = grab.query_measurement(field=1, numeric_only=False)
+        except Exception as e:
+            LOG.error("Meter read failed: %s", e)
+            sys.exit(1)
+
+        # Print a clean, parseable line to stdout (not via logger)
+        print(f"{mtype},{value},{unit}")
+        sys.exit(0)
 
     sys.exit(0)
 

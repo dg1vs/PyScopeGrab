@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from PyQt6.QtCore import QSettings
 
+
 class AppSettings:
     """
     Typed wrapper for QSettings.
@@ -17,7 +18,7 @@ class AppSettings:
     DEFAULT_BAUD = 1200
     DEFAULT_FG = "#222222"
     DEFAULT_BG = "#b1e580"
-    DEFAULT_CYCLIC_MS = 5000  # 3s
+    DEFAULT_CYCLIC_MS = 5000
 
     def __init__(self):
         self._s = QSettings(QSettings.Format.IniFormat,
@@ -35,7 +36,7 @@ class AppSettings:
 
     @property
     def baud(self) -> int:
-        return int(self._s.value("serial/baud", self.DEFAULT_BAUD))
+        return self._s.value("serial/baud", self.DEFAULT_BAUD, int)
 
     @baud.setter
     def baud(self, v: int):
@@ -61,7 +62,7 @@ class AppSettings:
     # ---- cyclic ----
     @property
     def cyclic_interval_ms(self) -> int:
-        return int(self._s.value("cyclic/interval_ms", self.DEFAULT_CYCLIC_MS))
+        return self._s.value("cyclic/interval_ms", self.DEFAULT_CYCLIC_MS, int)
 
     @cyclic_interval_ms.setter
     def cyclic_interval_ms(self, v: int):
