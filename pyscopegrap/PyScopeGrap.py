@@ -25,8 +25,7 @@ import logging
 
 from pyscopegrap.app_settings import AppSettings
 from pyscopegrap.scope_grabber import ScopeGrabber
-#from scope_gui_pyqt6 import run_gui
-from scpi_server import run_scpi_server, SCPIConfig
+from pyscopegrap.scpi_server import run_scpi_server, SCPIConfig
 
 
 def init_logger(opt):
@@ -187,6 +186,16 @@ def run_gui_from_separate_file(args, LOG):
     w.show()
     sys.exit(app.exec())
 
+
+def _make_grabber_from_args(args):
+    # Single place to build a configured ScopeGrabber
+    return ScopeGrabber(
+        tty=args.tty,
+        baud=19200,        # your current policy; adjust when baud handling is refactored
+        logger=logging.getLogger("PyScopeGrap"),
+    )
+
+
 # -----------------
 # Main
 # -----------------
@@ -198,6 +207,12 @@ def main() -> int:
     # Load settings unless suppressed
     settings = AppSettings()
     apply_settings(args, settings, use_saved=not args.no_settings)
+
+    if args.scpi_server:
+        cfg = SCPIConfig(host=args.scpi_host, port=args.scpi_port)
+        run_scpi_server(cfg, grabber_factory=lambda: _make_grabber_from_args(args))
+        exit(0)
+
 
     if args.withgui:
         run_gui_from_separate_file(args, LOG)  # never returns

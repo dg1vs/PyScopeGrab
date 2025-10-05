@@ -98,16 +98,6 @@ class ScopeGrabber:
         self.LOG.info('Switching to 19200 done')
         return self.port
 
-    def open_passive(self, baud: int | None = None, timeout: float = 1.0):
-        """Open serial port without sending any commands (stay at given baud)."""
-        import serial
-        b = int(baud or self.baud or 1200)
-        self.port = serial.Serial(self.tty, b, timeout=timeout)
-        self.baud = self.port.baudrate
-        self.LOG.info("Opened %s at %d (passive)", self.tty, self.baud)
-        return self.port
-
-
     def close(self):
         if self.port and self.port.is_open:
             self.port.close()
