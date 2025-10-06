@@ -24,7 +24,7 @@ import argparse
 import logging
 
 from pyscopegrap.app_settings import AppSettings
-from pyscopegrap.scope_grabber import ScopeGrabber
+from pyscopegrap.scope_grabber import (ScopeGrabber, ScopeError, AckTimeout, AckError, ProtocolError)
 from pyscopegrap.scpi_server import run_scpi_server, SCPIConfig
 
 
@@ -221,18 +221,12 @@ def main() -> int:
     if not getattr(args, 'grab', False) and not getattr(args, 'sniff', None) and not getattr(args, 'meter', False):
         args.grab = True
 
+
+
     grab = ScopeGrabber(tty=args.tty, baud=19200, logger=LOG)  # baud fixed internally (1200→19200)
     grab.initialize_port()
     # Identity is printed by the class (kept as-is)
     grab.get_identity()
-
-    if args.scpi_server:
-        cfg = SCPIConfig(host=args.scpi_host, port=args.scpi_port)
-        run_scpi_server(cfg, grabber_factory=lambda: _make_grabber_from_args(args))
-        exit(0)
-
-    #if args.status:
-    #    grab.get_status()
 
     # the minimal useful stuff, get the scope picture
     if args.grab:
@@ -257,7 +251,43 @@ def main() -> int:
         print(f"{mtype},{value},{unit}")
         sys.exit(0)
 
+
+
     sys.exit(0)
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
+
+# def main(argv=None) -> int:
+#     # ... parse args, set up logging, etc.
+#     grab = None
+#     try:
+#         grab = ScopeGrabber(tty=args.tty, baud=args_baud, logger=LOG)
+#         grab.initialize_port()
+#
+#         if args.info:
+#             model, fw, *_ = grab.read_identity_fields()
+#             print(f"{model}  FW {fw}")
+#             return 0
+#
+#         if args.grab:
+#             img = grab.get_screenshot_image(fg=fg, bg=bg, comment=args.comment or "")
+#             # ... save/show as you already do ...
+#             return 0
+#
+#         # ... other actions ...
+#         return 0
+#
+#     except ScopeError as e:
+#         LOG.error(str(e))
+#         return 1
+#     except Exception:
+#         LOG.exception("Unexpected error")
+#         return 2
+#     finally:
+#         try:
+#             if grab:
+#                 grab.close()
+#         except Exception:
+#             pass

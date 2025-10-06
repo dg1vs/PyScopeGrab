@@ -1,40 +1,25 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 import importlib.resources as res
-from math import sqrt
-
 from PyQt6 import uic
 from PyQt6.QtGui import QColor, QPalette
-from PyQt6.QtWidgets import (
-    QDialog, QDialogButtonBox, QColorDialog, QComboBox, QPushButton, QLineEdit, QSpinBox
-)
-
-# pyserial for enumerating ports
-try:
-    from serial.tools import list_ports
-except Exception:
-    list_ports = None
-
+from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QColorDialog, QComboBox, QPushButton, QLineEdit, QSpinBox)
+from serial.tools import list_ports
 from pyscopegrap.app_settings import AppSettings
 
 
 class PrefsDialog(QDialog):
+    # We have only 1200 at start, later will be switched to 19200
     BAUDS = [AppSettings.DEFAULT_BAUD]
 
     def __init__(self, parent, tty: str, baud: int, fg: str, bg: str, cyclic_ms: int):
         super().__init__(parent)
 
         # Load the .ui
-        try:
-            ui_path = res.files("pyscopegrap.ui").joinpath("prefs_dialog.ui")
-            with res.as_file(ui_path) as p:
-                uic.loadUi(p, self)
-        except Exception:
-            # Fallback for dev tree
-            here = Path(__file__).resolve().parent
-            uic.loadUi(here / "ui" / "prefs_dialog.ui", self)
+        ui_path = res.files("pyscopegrap.ui").joinpath("prefs_dialog.ui")
+        with res.as_file(ui_path) as p:
+            uic.loadUi(p, self)
 
         self.setModal(True)
 

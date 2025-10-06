@@ -2,18 +2,18 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
+import logging
+from io import BytesIO
+from datetime import datetime
+
 # Qt6 (PyQt6)
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal as Signal, pyqtSlot as Slot
 from PyQt6.QtGui import QAction, QPixmap, QShortcut, QKeySequence, QGuiApplication
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QFileDialog, QMessageBox, QStatusBar, QFrame, QSizePolicy, QLayout,
-    QTabWidget, QComboBox
+    QFileDialog, QMessageBox, QStatusBar, QFrame, QSizePolicy, QTabWidget, QComboBox
 )
-from io import BytesIO
-from datetime import datetime
-import os
-
 from pyscopegrap.app_settings import AppSettings
 from pyscopegrap.scope_grabber import ScopeGrabber
 from pyscopegrap.prefs_dialog import PrefsDialog
@@ -26,14 +26,14 @@ class GrabWorker(QThread):
     status = Signal(str)
     error = Signal(str)
 
-    def __init__(self, tty: str, baud: int, fg: str, bg: str, comment: str, logger=None):
+    def __init__(self, tty: str, baud: int, fg: str, bg: str, comment: str, logger: logging.Logger | None = None):
         super().__init__()
         self.tty = tty
         self.baud = int(baud)
         self.fg = fg
         self.bg = bg
         self.comment = comment
-        self.logger = logger
+        self.logger = logger or logging.getLogger(__name__)
 
     def run(self):
         grab = None

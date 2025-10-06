@@ -9,6 +9,22 @@ from typing import Optional, Tuple
 import serial
 from PIL import Image, PngImagePlugin
 
+# ---- Typed exceptions for protocol/transport errors ----
+class ScopeError(Exception):
+    """Base error for ScopeGrabber."""
+
+class PortNotOpen(ScopeError):
+    pass
+class AckTimeout(ScopeError):
+    pass
+class ProtocolError(ScopeError):
+    pass
+class AckError(ScopeError):
+    def __init__(self, code: int, message: str = ""):
+        self.code = code
+        super().__init__(message or f"Device returned ACK={code}")
+
+
 DIGIT0, DIGIT9 = ord('0'), ord('9')
 
 class ScopeGrabber:
@@ -25,7 +41,7 @@ class ScopeGrabber:
         grab.close()
     """
 
-    def __init__(self, tty: str, baud: int = 19200, *, logger: Optional[logging.Logger] = None):
+    def __init__(self, tty: str, baud: int = 19200, *, logger: logging.Logger | None = None):
         self.tty = tty
         self.baud = baud
         self.port: Optional[serial.Serial] = None
@@ -37,11 +53,9 @@ class ScopeGrabber:
     @staticmethod
     def hex2rgb(hexColor: str) -> Tuple[int, int, int]:
         """Convert '#rrggbb' or '0xRRGGBB' to an (R, G, B) tuple.
-
          Short input (length < 6) is zero-padded per nibble, e.g., 'abc' -> 'a0b0c0'.
          Returns values in range 0..255.
          """
-
         if hexColor[0] == '#':
             hexColor = hexColor[1:]
         elif hexColor[0:2].lower() == '0x':
@@ -59,11 +73,10 @@ class ScopeGrabber:
         sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
 
     @staticmethod
-    def calculate_checksum(data: bytes) -> int:
+    def _calculate_checksum(data: bytes) -> int:
         """Device checksum: simple sum of all bytes modulo 256.
         Matches the single trailing CRC byte sent by the ScopeMeter after payload.
         """
-
         checksum = 0
         for byte in data:
             checksum += byte
@@ -91,10 +104,10 @@ class ScopeGrabber:
         self.LOG.info('Init with 1200 done')  # preserving original user feedback
 
         # Try fast path first (no hard abort), then strict:
-        status = self.send_command('PC19200,N,8,1', timeout=False)
+        status = self._send_command('PC19200,N,8,1', timeout=False)
         self.port.baudrate = 19200
         if status is False:
-            self.send_command('PC19200,N,8,1', timeout=True)
+            self._send_command('PC19200,N,8,1', timeout=True)
         self.LOG.info('Switching to 19200 done')
         return self.port
 
@@ -105,7 +118,7 @@ class ScopeGrabber:
     # -----------------------
     # Protocol (names kept)
     # -----------------------
-    def send_command(self, command: str, timeout: bool = True):
+    def _send_command(self, command: str, timeout: bool = True):
         """Send ASCII command + CR; parse 2-byte ACK.
         ACK format: <code><CR>
           code '0' : OK
@@ -134,13 +147,16 @@ class ScopeGrabber:
         if len(ack) != 2:
             if timeout:
                 self.LOG.warning('error: command acknowledgement timed out')
-                sys.exit(1)
+                raise PortNotOpen("communication port not initialized")
             else:
                 return False
 
-        if ack[1] != ord('\r'):
+        #if ack[1] != ord('\r'):
+        if ack[1:2] != b'\r':
             self.LOG.warning('error: did not receive CR after acknowledgement code')
-            sys.exit(1)
+            # More context for logs and users:
+            # raise ProtocolError('no CR after acknowledgement code')
+            raise ProtocolError(f"Malformed ACK for {command!r}: expected <digit><CR>, got {ack!r}")
 
         code = int(chr(ack[0]))
         if code == 0:
@@ -155,7 +171,7 @@ class ScopeGrabber:
             self.LOG.warning('error: Communication error')
         else:
             self.LOG.warning('error: Unknown error code (' + str(code) + ') in command acknowledgement')
-        sys.exit(code)
+        raise AckError(code)
 
     def get_identity(self):
         """Query 'ID' and print parsed identity fields.
@@ -168,13 +184,13 @@ class ScopeGrabber:
 
         assert self.port is not None, "Port not initialized"
         self.LOG.info('Getting identity of ScopeMeter...')
-        self.send_command('ID')
+        self._send_command('ID')
         identity = bytearray()
         while True:
             byte = self.port.read()
             if len(byte) != 1:
                 self.LOG.warning('error: timeout while receiving data')
-                sys.exit(1)
+                raise AckTimeout('command acknowledgement timed out')
             if byte[0] == ord('\r'):
                 break
             identity.append(byte[0])
@@ -184,12 +200,12 @@ class ScopeGrabber:
         self.LOG.debug(identity)
         if len(identity) != 6:  # 6 is for fluke 105
             self.LOG.warning('error: unable to decode identity string')
-            sys.exit(1)
+            raise ProtocolError('unable to decode identity string')
 
         model = identity[0].decode()
         firmware = identity[1].decode()
-        self.LOG.info('     Model: ' + model)
-        self.LOG.info('   Version:' + firmware)
+        self.LOG.info('Model: ' + model)
+        self.LOG.info('Version:' + firmware)
 
     def get_status(self):
         """Request status ('IS'), decode numeric bitfield, and print set bits.
@@ -214,13 +230,13 @@ class ScopeGrabber:
         }
 
         self.LOG.info('Getting status of ScopeMeter...')
-        self.send_command('IS')
+        self._send_command('IS')
         input_buf = bytearray()
         while True:
             byte = self.port.read()
             if len(byte) != 1:
                 self.LOG.warning('error: timeout while receiving data')
-                sys.exit(1)
+                raise AckTimeout('command acknowledgement timed out')
             if byte[0] == ord('\r'):
                 break
             input_buf.append(byte[0])
@@ -238,14 +254,21 @@ class ScopeGrabber:
 
 
     def get_screenshot_image(self, *, fg: str, bg: str, comment: str) -> Image.Image:
-        """Fetch raw EPSON bytes over serial and return a Pillow Image (no disk I/O)."""
+        """Fetch raw EPSON bytes over serial and return a Pillow Image (no disk I/O).
+        Transfer layout (as implemented here):
+        1) Read 4 ASCII digits: total payload length (not yet used).
+        2) Read one byte ',' separator.
+        3) Read 7454 bytes of EPSON graphics (empirical for 240×240).
+        4) Read one-byte CRC from device and compare to local checksum.
+        """
+
         assert self.port is not None
         self.LOG.info('Downloading screenshot from ScopeMeter...')
 
         old_timeout = self.port.timeout
         try:
             self.port.timeout = None
-            self.send_command('QP')
+            self._send_command('QP')
 
             # Read header (4 ASCII digits), comma, payload, crc
             ascii_len = self.port.read(4)
@@ -262,11 +285,11 @@ class ScopeGrabber:
             #Todo crc_from_device = int.from_bytes(self.port.read(1))
             crc_from_device = self.port.read(1)[0]
 
-            if crc_from_device != self.calculate_checksum(epson):
+            if crc_from_device != self._calculate_checksum(epson):
                 self.LOG.warning('CRC-Error')
 
             # Decode to bitmap
-            img = self.generate_image(epson, fg=fg, bg=bg)
+            img = self._generate_image(epson, fg=fg, bg=bg)
 
             # Stash intended PNG text in a conventional place so callers can use it when saving
             img.info.setdefault("png_text", {
@@ -278,12 +301,20 @@ class ScopeGrabber:
         finally:
             self.port.timeout = old_timeout
 
-    # Back-compat shim (optional): same name, but now returns an Image
-    def generate_screenshot(self, prn: bytes, opt) -> Image.Image:
-        """Deprecated: use generate_image(). Kept for compatibility; returns an Image."""
-        return self.generate_image(prn, fg=opt.fg, bg=opt.bg)
+    def generate_test_image(self, fg: str, bg: str) -> Image.Image:
+        """Create a synthetic 240×240 test image (same drawing as before)."""
+        fg = self.hex2rgb(fg)
+        img = Image.new('RGB', (240, 240), bg)
+        pixels = img.load()
 
-    def generate_image(self, prn: bytes, *, fg: str, bg: str) -> Image.Image:
+        for i in range(240):
+            pixels[i, i] = fg
+            pixels[i, 119] = fg
+            pixels[119, i] = fg
+            pixels[239 - i, i] = fg
+        return img
+
+    def _generate_image(self, prn: bytes, *, fg: str, bg: str) -> Image.Image:
         """Decode EPSON-graphics bytes into a Pillow Image (240×240 RGB)."""
         fg_rgb = self.hex2rgb(fg)
         img = Image.new('RGB', (240, 240), bg)
@@ -325,7 +356,6 @@ class ScopeGrabber:
                     graphmode = False
                 xcoord += 1
                 i += 1
-
         return img
 
     # Helper the CLI can use when saving to PNG
@@ -344,7 +374,7 @@ class ScopeGrabber:
             b = self.port.read()
             if len(b) != 1:
                 self.LOG.warning('error: timeout while receiving data')
-                sys.exit(1)
+                raise AckTimeout('timeout while receiving data')
             if b[0] == ord('\r'):
                 break
             buf.append(b[0])
@@ -362,7 +392,7 @@ class ScopeGrabber:
             self.LOG.warning("QM field out of METER range (1..12)"); sys.exit(2)
 
         cmd = f"QM{field}" + (",V" if numeric_only else "")
-        self.send_command(cmd)  # ACK 0 continues with data (terminated by <CR>)
+        self._send_command(cmd)  # ACK 0 continues with data (terminated by <CR>)
         line = self._read_ascii_line()
 
         if numeric_only:
@@ -371,19 +401,19 @@ class ScopeGrabber:
         parts = [p.strip() for p in line.split(",")]
         if len(parts) != 3:
             self.LOG.warning(f"unexpected QM response: {line}")
-            sys.exit(2)
+            raise ProtocolError('unexpected QM response: {line}')
         t, v, u = parts
         return t, float(v), u
 
     def read_identity_fields(self) -> list[str]:
         """Return the 6 semicolon-separated ID fields as strings."""
         assert self.port is not None
-        self.send_command('ID')
+        self._send_command('ID')
         line = self._read_ascii_line()  # reads until CR
         parts = [p.strip() for p in line.split(';')]
         if len(parts) != 6:
             self.LOG.warning('unexpected identity response: %r', line)
-            sys.exit(1)
+            raise ProtocolError('unexpected identity response: %r', line)
         return parts  # [model, fw, date, lang1, lang2, ...]
 
     def scpi_idn_string(self) -> str:
@@ -392,135 +422,6 @@ class ScopeGrabber:
         return f"FLUKE,{model},-,{fw}"
 
 
-    # def get_screenshot(self, options):
-    #     """Run 'QP' to fetch a screenshot and render it via generate_screenshot().
-    #
-    #     Transfer layout (as implemented here):
-    #       1) Read 4 ASCII digits: total payload length (not yet used).
-    #       2) Read one byte ',' separator.
-    #       3) Read 7454 bytes of EPSON graphics (empirical for 240×240).
-    #       4) Read one-byte CRC from device and compare to local checksum.
-    #
-    #     Notes:
-    #       - Temporarily disables 'port.timeout' to allow full blocking reads.
-    #       - On CRC mismatch, logs a warning but continues to save the image.
-    #     """
-    #
-    #     assert self.port is not None, "Port not initialized"
-    #     print('Downloading screenshot from ScopeMeter...')
-    #
-    #     old_timeout = self.port.timeout
-    #     self.port.timeout = None
-    #
-    #     self.send_command('QP')
-    #
-    #     self.LOG.debug('# Read length')
-    #     ascii_chars = self.port.read(4)
-    #     ascii_string = str(ascii_chars)
-    #     payload_len = int(ascii_chars.decode("ascii"))
-    #     # 7454: observed payload size for 240x240 EPSON graphics on Fluke 105.
-    #
-    #     self.LOG.debug(ascii_chars)
-    #     self.LOG.debug(payload_len)
-    #
-    #     self.LOG.debug('# Read ,')
-    #     self.LOG.debug(self.port.read(1))
-    #
-    #     self.LOG.debug('# Read data')
-    #     epson = self.port.read(payload_len)
-    #     self.LOG.debug(epson)
-    #     self.LOG.debug(len(epson))
-    #
-    #     self.LOG.debug('# Read CRC')
-    #     crc_from_device = int.from_bytes(self.port.read(1))
-    #     self.LOG.debug(crc_from_device)
-    #     crc_calculated = self.calculate_checksum(epson)
-    #     self.LOG.debug(crc_calculated)
-    #
-    #     if crc_from_device != crc_calculated:
-    #         self.LOG.warning('CRC-Error')
-    #
-    #     self.port.timeout = old_timeout
-    #
-    #     self.generate_screenshot(epson, options)
-    #
-    # # -----------------------
-    # # Image creation (names kept)
-    # # -----------------------
-    # def generate_screenshot_test(self, opt):
-    #     """Create a synthetic 240×240 test image (same drawing as before)."""
-    #     fg = self.hex2rgb(opt.fg)
-    #     # NOTE: keep original reliance on opt.bg / opt.auto / opt.out for now
-    #     img = Image.new('RGB', (240, 240), opt.bg)
-    #     pixels = img.load()
-    #
-    #     for i in range(240):
-    #         pixels[i, i] = fg
-    #         pixels[i, 119] = fg
-    #         pixels[119, i] = fg
-    #         pixels[239 - i, i] = fg
-    #
-    #     if opt.out is None:
-    #         self.LOG.debug('file will be saved in current directory')
-    #         opt.out = 'screenshot_' + str(int(time.time())) + '.png'
-    #     img.save(opt.out)
-    #     self.LOG.debug(opt.out + ' saved')
-    #     if opt.auto:
-    #         img.show()
-    #
-    # def generate_screenshot(self, prn: bytes, opt):
-    #     """Decode EPSON-graphics bytes into a 240×240 PNG (same pixel logic)."""
-    #     fg = self.hex2rgb(opt.fg)
-    #     img = Image.new('RGB', (240, 240), opt.bg)
-    #     pixels = img.load()
-    #
-    #     png_info = PngImagePlugin.PngInfo()
-    #     png_info.add_text('Generator', 'PyScopeGrap V0.1')
-    #     png_info.add_text('Description', 'Exported from Fluke 105')
-    #     png_info.add_text('Extra text', opt.comment)
-    #
-    #     self.LOG.info(str(len(prn)) + ' bytes received')
-    #     graphmode = False
-    #     graphlen = 0
-    #     i = 0
-    #     line = 0
-    #     xcoord = 0
-    #
-    #     while i < len(prn):
-    #         if not graphmode:
-    #             c = prn[i]
-    #             if c == 0x1b:
-    #                 i += 1
-    #                 if prn[i] == 0x2a:  # *
-    #                     i += 1
-    #                     i += 1
-    #                     graphlen = prn[i]
-    #                     i += 1
-    #                     graphlen += prn[i] * 256
-    #                     graphmode = True
-    #                     xcoord = 0
-    #             elif c == 0x0d:
-    #                 line += 1
-    #             i += 1
-    #         else:
-    #             j = 0
-    #             c = prn[i]
-    #             while j < 8:
-    #                 if c & (1 << j):
-    #                     if (line > 0) and (line < 31) and (((line * 8) - j) < 240):
-    #                         pixels[xcoord, ((line) * 8) - j] = fg
-    #                 j += 1
-    #             graphlen -= 1
-    #             if graphlen == 0:
-    #                 graphmode = False
-    #             xcoord += 1
-    #             i += 1
-    #
-    #     if opt.out is None:
-    #         self.LOG.debug('file will be saved in current directory')
-    #         opt.out = 'screenshot_' + str(int(time.time())) + '.png'
-    #     img.save(opt.out, 'PNG', pnginfo=png_info)
-    #
-    #     print(opt.out + ' saved')
-    #     if opt.auto:
-    #         img.show()
+
+
+

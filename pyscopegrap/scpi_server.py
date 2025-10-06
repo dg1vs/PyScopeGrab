@@ -154,35 +154,6 @@ class _SCPIHandler(socketserver.StreamRequestHandler):
         # return '-113,"Undefined header"'
         return f"ERR:UNRECOGNIZED {raw}"
 
-
-def _dispatch(self, raw: str) -> Optional[str]:
-    up = raw.upper()
-
-    if up == "*IDN?":
-        try:
-            def fn(g):
-                try:
-                    return g.scpi_idn_string()  # e.g., "FLUKE,<model>,-,<fw>"
-                except Exception as e:
-                    return f"ERR:IDN {e}"
-            return self.STATE.with_grabber(fn)
-        except Exception as e:
-            return f"ERR:OPEN {e}"
-
-    if up == "MEAS:VOLT:DC?":
-        try:
-            def fn(g):
-                try:
-                    val = g.query_measurement(field=1, numeric_only=True)
-                except Exception as e:
-                    return f"ERR:MEAS:VOLT:DC {e}"
-                return str(val)  # numeric only; client adds " V"
-            return self.STATE.with_grabber(fn)
-        except Exception as e:
-            return f"ERR:OPEN {e}"
-
-    return f"ERR:UNRECOGNIZED {raw}"
-
 def run_scpi_server(config: SCPIConfig,
                     grabber_factory: Callable[[], object]) -> None:
     """
