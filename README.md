@@ -17,10 +17,10 @@ pip install -e .
 ## Run
 ```bash
 # CLI grab (defaults pulled from user settings)
-pyscopegrap -g --out screenshot.png
+pyscopegrab -g --out screenshot.png
 
 # Launch GUI
-pyscopegrap --withgui
+pyscopegrab --withgui
 ```
 
 ## Some intressting links

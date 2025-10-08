@@ -123,19 +123,19 @@ Example:           #  7        0123456  <PNG bytes> \n
 ### 4.1 One‑shot screenshot to file (no GUI)
 ```bash
 # Minimal: auto‑name based on date or use -o to name the file
-python3 -m pyscopegrap -t /dev/ttyUSB0 -o out.png -v
+python3 -m pyscopegrab -t /dev/ttyUSB0 -o out.png -v
 ```
 
 ### 4.2 Start the GUI
 ```bash
-python3 -m pyscopegrap --with-gui -v
+python3 -m pyscopegrab --with-gui -v
 # File → Preferences to set the serial port and colors, then click “Grab”.
 ```
 
 ### 4.3 Run the SCPI server
 ```bash
 # Start the server (opens serial, then listens on TCP 5025)
-python3 -m pyscopegrap --scpi-server -t /dev/ttyUSB0 --scpi-host 127.0.0.1 --scpi-port 5025 -v
+python3 -m pyscopegrab --scpi-server -t /dev/ttyUSB0 --scpi-host 127.0.0.1 --scpi-port 5025 -v
 # Stop with Ctrl+C
 ```
 
