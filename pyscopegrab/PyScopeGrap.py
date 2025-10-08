@@ -23,9 +23,9 @@ import os
 import argparse
 import logging
 
-from pyscopegrap.app_settings import AppSettings
-from pyscopegrap.scope_grabber import (ScopeGrabber, ScopeError, AckTimeout, AckError, ProtocolError)
-from pyscopegrap.scpi_server import run_scpi_server, SCPIConfig
+from pyscopegrab.app_settings import AppSettings
+from pyscopegrab.scope_grabber import (ScopeGrabber, ScopeError, AckTimeout, AckError, ProtocolError)
+from pyscopegrab.scpi_server import run_scpi_server, SCPIConfig
 
 
 def init_logger(opt):
@@ -56,7 +56,7 @@ def init_logger(opt):
 
     # -------- File handler (full detail) --------
     if getattr(opt, "logging", False):
-        log_path = getattr(opt, "log_file", None) or "pyscopegrap.log"
+        log_path = getattr(opt, "log_file", None) or "pyscopegrab.log"
         os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
         fh = logging.FileHandler(log_path, encoding="utf-8", mode="w")
         fh.setLevel(logging.DEBUG)  # capture everything to file
@@ -167,7 +167,7 @@ def run_gui_from_separate_file(args, LOG):
     # Lazy import so CLI users don’t need PyQt6
     try:
         from PyQt6.QtWidgets import QApplication
-        from pyscopegrap.scope_gui_pyqt6 import MainWindow  # your separate GUI file
+        from pyscopegrab.scope_gui_pyqt6 import MainWindow  # your separate GUI file
     except Exception as e:
         LOG.info("GUI dependencies are missing (PyQt6) or scope_gui_pyqt6.py not found.")
         LOG.info(f"Details: {e}")

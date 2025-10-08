@@ -14,9 +14,9 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QFileDialog, QMessageBox, QStatusBar, QFrame, QSizePolicy, QTabWidget, QComboBox
 )
-from pyscopegrap.app_settings import AppSettings
-from pyscopegrap.scope_grabber import ScopeGrabber
-from pyscopegrap.prefs_dialog import PrefsDialog
+from pyscopegrab.app_settings import AppSettings
+from pyscopegrab.scope_grabber import ScopeGrabber
+from pyscopegrab.prefs_dialog import PrefsDialog
 
 
 # ------------------------------- Worker -------------------------------------

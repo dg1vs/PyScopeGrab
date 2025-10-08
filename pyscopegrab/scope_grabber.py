@@ -47,11 +47,33 @@ class ScopeGrabber:
         self.port: Optional[serial.Serial] = None
         self.LOG = logger or logging.getLogger(__name__)
 
-    # -----------------------
-    # Helpers (names kept)
-    # -----------------------
     @staticmethod
-    def hex2rgb(hexColor: str) -> Tuple[int, int, int]:
+    def _calculate_checksum(data: bytes) -> int:
+        """Device checksum: simple sum of all bytes modulo 256.
+        Matches the single trailing CRC byte sent by the ScopeMeter after payload.
+        """
+        checksum = 0
+        for byte in data:
+            checksum += byte
+            checksum %= 256
+        return checksum
+
+    def _read_ascii_line(self) -> str:
+        """Read ASCII data until <CR>; abort on timeout like other methods."""
+        assert self.port is not None
+        buf = bytearray()
+        while True:
+            b = self.port.read()
+            if len(b) != 1:
+                self.LOG.warning('error: timeout while receiving data')
+                raise AckTimeout('timeout while receiving data')
+            if b[0] == ord('\r'):
+                break
+            buf.append(b[0])
+        return bytes(buf).decode("ascii").strip()
+
+    @staticmethod
+    def _hex2rgb(hexColor: str) -> Tuple[int, int, int]:
         """Convert '#rrggbb' or '0xRRGGBB' to an (R, G, B) tuple.
          Short input (length < 6) is zero-padded per nibble, e.g., 'abc' -> 'a0b0c0'.
          Returns values in range 0..255.
@@ -64,60 +86,6 @@ class ScopeGrabber:
             hexColor = hexColor[0] + '0' + hexColor[1] + '0' + hexColor[2] + '0'
         return int(hexColor[0:2], 16), int(hexColor[2:4], 16), int(hexColor[4:6], 16)
 
-    @staticmethod
-    def display_progress_bar(count, total, suffix=''):
-        bar_len = 40
-        filled_len = int(round(bar_len * count / float(total)))
-        percents = round(100.0 * count / float(total), 1)
-        bar = '=' * filled_len + '-' * (bar_len - filled_len)
-        sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
-
-    @staticmethod
-    def _calculate_checksum(data: bytes) -> int:
-        """Device checksum: simple sum of all bytes modulo 256.
-        Matches the single trailing CRC byte sent by the ScopeMeter after payload.
-        """
-        checksum = 0
-        for byte in data:
-            checksum += byte
-            checksum %= 256
-        return checksum
-
-    # -----------------------
-    # Serial lifecycle
-    # -----------------------
-    def initialize_port(self, timeout: float = 1.0) -> serial.Serial:
-        """Open the serial port and switch the ScopeMeter to higher baud.
-
-        Sequence:
-          - Open at 1200 baud (device's default after power-up).
-          - Try 'PC 19200' once without timeout handling; on failure, retry strict.
-          - Update local 'port.baudrate' to 19200 to match the device.
-
-        Returns:
-          Configured pyserial Serial instance.
-        """
-
-        import serial  # local import keeps module OS-independent and light
-        self.LOG.info('Opening and configuring serial port...')
-        self.port = serial.Serial(self.tty, 1200, timeout=timeout)  # device default
-        self.LOG.info('Init with 1200 done')  # preserving original user feedback
-
-        # Try fast path first (no hard abort), then strict:
-        status = self._send_command('PC19200,N,8,1', timeout=False)
-        self.port.baudrate = 19200
-        if status is False:
-            self._send_command('PC19200,N,8,1', timeout=True)
-        self.LOG.info('Switching to 19200 done')
-        return self.port
-
-    def close(self):
-        if self.port and self.port.is_open:
-            self.port.close()
-
-    # -----------------------
-    # Protocol (names kept)
-    # -----------------------
     def _send_command(self, command: str, timeout: bool = True):
         """Send ASCII command + CR; parse 2-byte ACK.
         ACK format: <code><CR>
@@ -172,6 +140,49 @@ class ScopeGrabber:
         else:
             self.LOG.warning('error: Unknown error code (' + str(code) + ') in command acknowledgement')
         raise AckError(code)
+
+
+    @staticmethod
+    def display_progress_bar(count, total, suffix=''):
+        bar_len = 40
+        filled_len = int(round(bar_len * count / float(total)))
+        percents = round(100.0 * count / float(total), 1)
+        bar = '=' * filled_len + '-' * (bar_len - filled_len)
+        sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
+
+
+
+    # -----------------------
+    # Serial lifecycle
+    # -----------------------
+    def initialize_port(self, timeout: float = 1.0) -> serial.Serial:
+        """Open the serial port and switch the ScopeMeter to higher baud.
+
+        Sequence:
+          - Open at 1200 baud (device's default after power-up).
+          - Try 'PC 19200' once without timeout handling; on failure, retry strict.
+          - Update local 'port.baudrate' to 19200 to match the device.
+
+        Returns:
+          Configured pyserial Serial instance.
+        """
+
+        import serial  # local import keeps module OS-independent and light
+        self.LOG.info('Opening and configuring serial port...')
+        self.port = serial.Serial(self.tty, 1200, timeout=timeout)  # device default
+        self.LOG.info('Init with 1200 done')  # preserving original user feedback
+
+        # Try fast path first (no hard abort), then strict:
+        status = self._send_command('PC19200,N,8,1', timeout=False)
+        self.port.baudrate = 19200
+        if status is False:
+            self._send_command('PC19200,N,8,1', timeout=True)
+        self.LOG.info('Switching to 19200 done')
+        return self.port
+
+    def close(self):
+        if self.port and self.port.is_open:
+            self.port.close()
 
     def get_identity(self):
         """Query 'ID' and print parsed identity fields.
@@ -303,7 +314,7 @@ class ScopeGrabber:
 
     def generate_test_image(self, fg: str, bg: str) -> Image.Image:
         """Create a synthetic 240×240 test image (same drawing as before)."""
-        fg = self.hex2rgb(fg)
+        fg = self._hex2rgb(fg)
         img = Image.new('RGB', (240, 240), bg)
         pixels = img.load()
 
@@ -316,7 +327,7 @@ class ScopeGrabber:
 
     def _generate_image(self, prn: bytes, *, fg: str, bg: str) -> Image.Image:
         """Decode EPSON-graphics bytes into a Pillow Image (240×240 RGB)."""
-        fg_rgb = self.hex2rgb(fg)
+        fg_rgb = self._hex2rgb(fg)
         img = Image.new('RGB', (240, 240), bg)
         pixels = img.load()
 
@@ -366,20 +377,6 @@ class ScopeGrabber:
             pi.add_text(k, v)
         return pi
 
-    def _read_ascii_line(self) -> str:
-        """Read ASCII data until <CR>; abort on timeout like other methods."""
-        assert self.port is not None
-        buf = bytearray()
-        while True:
-            b = self.port.read()
-            if len(b) != 1:
-                self.LOG.warning('error: timeout while receiving data')
-                raise AckTimeout('timeout while receiving data')
-            if b[0] == ord('\r'):
-                break
-            buf.append(b[0])
-        return bytes(buf).decode("ascii").strip()
-
     def query_measurement(self, field: int = 1, numeric_only: bool = False):
         """
         Passive meter read using QM<field>[,V].
@@ -420,8 +417,6 @@ class ScopeGrabber:
         """Return a SCPI-style *IDN? string: 'FLUKE,<model>,-,<fw>'."""
         model, fw, *_ = self.read_identity_fields()
         return f"FLUKE,{model},-,{fw}"
-
-
 
 
 

@@ -9,16 +9,10 @@ import io
 import logging
 
 # top of file
-try:
-    from pyscopegrap.app_settings import AppSettings
-    _FG_DEFAULT = AppSettings.DEFAULT_FG
-    _BG_DEFAULT = AppSettings.DEFAULT_BG
-except Exception:
-    # Fallback if settings module isn't available
-    _FG_DEFAULT = "#222222"
-    _BG_DEFAULT = "#b1e580"
+from pyscopegrab.app_settings import AppSettings
 
-
+_FG_DEFAULT = AppSettings.DEFAULT_FG
+_BG_DEFAULT = AppSettings.DEFAULT_BG
 
 __all__ = ["run_scpi_server", "SCPIConfig"]
 

@@ -6,7 +6,7 @@ from PyQt6 import uic
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QColorDialog, QComboBox, QPushButton, QLineEdit, QSpinBox)
 from serial.tools import list_ports
-from pyscopegrap.app_settings import AppSettings
+from pyscopegrab.app_settings import AppSettings
 
 
 class PrefsDialog(QDialog):
@@ -17,7 +17,7 @@ class PrefsDialog(QDialog):
         super().__init__(parent)
 
         # Load the .ui
-        ui_path = res.files("pyscopegrap.ui").joinpath("prefs_dialog.ui")
+        ui_path = res.files("pyscopegrab.ui").joinpath("prefs_dialog.ui")
         with res.as_file(ui_path) as p:
             uic.loadUi(p, self)
 
